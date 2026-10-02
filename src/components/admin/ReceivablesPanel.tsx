@@ -71,7 +71,7 @@ export default function ReceivablesPanel() {
 
   return (
     <div className="space-y-3">
-      <h2 className="text-base font-semibold text-gray-900">Cuentas por Cobrar</h2>
+      <h2 className="admin-display text-2xl font-bold text-gray-900">Cobros</h2>
 
       {!loading && data && (
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-gray-200 bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">

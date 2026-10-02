@@ -1,0 +1,195 @@
+/*
+ * Tema visual del panel de administración.
+ * Todo vive bajo .admin-shell para no afectar la web pública. El modo oscuro
+ * se activa con data-admin-theme="dark" (lo pone AdminThemeContext) y
+ * re-mapea las utilidades grises de Tailwind que usan los paneles existentes.
+ */
+
+.admin-shell {
+  --a-bg: #f5f6f9;
+  --a-surface: #ffffff;
+  --a-surface-2: #eef1f6;
+  --a-line: #dfe3ec;
+  --a-fg: #16192a;
+  --a-muted: #5d6479;
+  --a-faint: #8a90a3;
+  --a-brand: #c41e2c;
+  --a-brand-soft: #fde8ea;
+  --a-navy: #1d2a55;
+  --a-navy-fg: #e8ecf7;
+  --a-navy-muted: #9ba6c9;
+  --a-ok: #17804a;
+  --a-ok-soft: #e1f4e9;
+  --a-warn: #a86200;
+  --a-warn-soft: #fdf0d9;
+  --a-bad: #b4232f;
+  --a-bad-soft: #fde4e6;
+  --a-info: #2a5bb8;
+  --a-info-soft: #e3ecfb;
+  --a-shadow: 0 1px 2px rgba(22, 25, 42, 0.06), 0 4px 14px rgba(22, 25, 42, 0.05);
+  --a-font-display: 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif;
+  --a-font-body: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  background: var(--a-bg);
+  color: var(--a-fg);
+  font-family: var(--a-font-body);
+  color-scheme: light;
+}
+
+.admin-shell[data-admin-theme='dark'] {
+  --a-bg: #0f1220;
+  --a-surface: #171b2d;
+  --a-surface-2: #1f2439;
+  --a-line: #2a3049;
+  --a-fg: #e9ebf3;
+  --a-muted: #a2a8bf;
+  --a-faint: #767d97;
+  --a-brand: #ff5a66;
+  --a-brand-soft: #3a1820;
+  --a-navy: #0b0e1a;
+  --a-navy-fg: #e8ecf7;
+  --a-navy-muted: #8a95ba;
+  --a-ok: #4fcf86;
+  --a-ok-soft: #14321f;
+  --a-warn: #f0b042;
+  --a-warn-soft: #3a2a10;
+  --a-bad: #ff6b77;
+  --a-bad-soft: #3c1820;
+  --a-info: #7aa5ff;
+  --a-info-soft: #182746;
+  --a-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+.admin-shell h1,
+.admin-shell h2,
+.admin-shell h3,
+.admin-shell h4 {
+  font-family: var(--a-font-body);
+}
+
+.admin-display {
+  font-family: var(--a-font-display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.admin-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Piezas del diseño nuevo ── */
+.admin-card {
+  background: var(--a-surface);
+  border: 1px solid var(--a-line);
+  border-radius: 10px;
+  box-shadow: var(--a-shadow);
+  min-width: 0;
+}
+
+.admin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+.admin-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.admin-pill[data-tone='ok'] { background: var(--a-ok-soft); color: var(--a-ok); }
+.admin-pill[data-tone='warn'] { background: var(--a-warn-soft); color: var(--a-warn); }
+.admin-pill[data-tone='bad'] { background: var(--a-bad-soft); color: var(--a-bad); }
+.admin-pill[data-tone='info'] { background: var(--a-info-soft); color: var(--a-info); }
+.admin-pill[data-tone='mute'] { background: var(--a-surface-2); color: var(--a-muted); }
+
+.admin-stripe { align-self: stretch; width: 4px; border-radius: 4px; }
+.admin-stripe[data-tone='ok'] { background: var(--a-ok); }
+.admin-stripe[data-tone='warn'] { background: var(--a-warn); }
+.admin-stripe[data-tone='bad'] { background: var(--a-bad); }
+.admin-stripe[data-tone='info'] { background: var(--a-info); }
+
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--a-line);
+  background: var(--a-surface);
+  color: var(--a-fg);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+.admin-btn:hover { background: var(--a-surface-2); }
+.admin-btn[data-variant='primary'] { background: var(--a-brand); border-color: var(--a-brand); color: #fff; }
+.admin-btn[data-variant='primary']:hover { filter: brightness(1.07); }
+.admin-btn[data-size='sm'] { padding: 4px 9px; font-size: 12px; }
+
+.admin-shell :focus-visible {
+  outline: 2px solid var(--a-brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Modo oscuro para los paneles existentes (utilidades de Tailwind) ── */
+.admin-shell[data-admin-theme='dark'] .bg-white { background-color: var(--a-surface); }
+.admin-shell[data-admin-theme='dark'] .bg-gray-50 { background-color: var(--a-surface-2); }
+.admin-shell[data-admin-theme='dark'] .bg-gray-100 { background-color: var(--a-surface-2); }
+.admin-shell[data-admin-theme='dark'] .text-gray-900 { color: var(--a-fg); }
+.admin-shell[data-admin-theme='dark'] .text-gray-700,
+.admin-shell[data-admin-theme='dark'] .text-gray-600 { color: #c9cde0; }
+.admin-shell[data-admin-theme='dark'] .text-gray-500 { color: var(--a-muted); }
+.admin-shell[data-admin-theme='dark'] .text-gray-400,
+.admin-shell[data-admin-theme='dark'] .text-gray-300 { color: var(--a-faint); }
+.admin-shell[data-admin-theme='dark'] .border-gray-100,
+.admin-shell[data-admin-theme='dark'] .border-gray-200 { border-color: var(--a-line); }
+.admin-shell[data-admin-theme='dark'] .divide-gray-50 > * + *,
+.admin-shell[data-admin-theme='dark'] .divide-gray-100 > * + *,
+.admin-shell[data-admin-theme='dark'] .divide-gray-200 > * + * { border-color: var(--a-line); }
+.admin-shell[data-admin-theme='dark'] .hover\:bg-gray-50:hover,
+.admin-shell[data-admin-theme='dark'] .hover\:bg-gray-100:hover { background-color: #262c45; }
+.admin-shell[data-admin-theme='dark'] .hover\:text-gray-900:hover,
+.admin-shell[data-admin-theme='dark'] .hover\:text-gray-600:hover { color: var(--a-fg); }
+
+.admin-shell[data-admin-theme='dark'] .bg-green-100 { background-color: var(--a-ok-soft); }
+.admin-shell[data-admin-theme='dark'] .text-green-700 { color: var(--a-ok); }
+.admin-shell[data-admin-theme='dark'] .bg-yellow-100 { background-color: var(--a-warn-soft); }
+.admin-shell[data-admin-theme='dark'] .text-yellow-700 { color: var(--a-warn); }
+.admin-shell[data-admin-theme='dark'] .bg-red-100,
+.admin-shell[data-admin-theme='dark'] .bg-red-50 { background-color: var(--a-bad-soft); }
+.admin-shell[data-admin-theme='dark'] .text-red-700,
+.admin-shell[data-admin-theme='dark'] .text-red-600 { color: var(--a-bad); }
+.admin-shell[data-admin-theme='dark'] .bg-amber-50 { background-color: var(--a-warn-soft); }
+.admin-shell[data-admin-theme='dark'] .text-amber-700 { color: var(--a-warn); }
+.admin-shell[data-admin-theme='dark'] .border-amber-200 { border-color: #5a4318; }
+.admin-shell[data-admin-theme='dark'] .border-red-200 { border-color: #5c2530; }
+.admin-shell[data-admin-theme='dark'] .text-green-600 { color: var(--a-ok); }
+.admin-shell[data-admin-theme='dark'] .bg-blue-100,
+.admin-shell[data-admin-theme='dark'] .bg-blue-50 { background-color: var(--a-info-soft); }
+.admin-shell[data-admin-theme='dark'] .text-blue-700,
+.admin-shell[data-admin-theme='dark'] .text-blue-600 { color: var(--a-info); }
+
+.admin-shell[data-admin-theme='dark'] input:not([type='checkbox']):not([type='radio']),
+.admin-shell[data-admin-theme='dark'] select,
+.admin-shell[data-admin-theme='dark'] textarea {
+  background-color: var(--a-surface-2);
+  color: var(--a-fg);
+  border-color: var(--a-line);
+}
+.admin-shell[data-admin-theme='dark'] input::placeholder,
+.admin-shell[data-admin-theme='dark'] textarea::placeholder { color: var(--a-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell *,
+  .admin-shell *::before,
+  .admin-shell *::after { transition: none !important; animation: none !important; }
+}

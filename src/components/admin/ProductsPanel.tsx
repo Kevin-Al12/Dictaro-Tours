@@ -71,7 +71,7 @@ export default function ProductsPanel() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">Productos y Servicios</h2>
+        <h2 className="admin-display text-2xl font-bold text-gray-900">Productos y servicios</h2>
         <button onClick={openNew} className="btn-primary text-sm py-2 px-4">
           <Plus className="w-4 h-4" />Nuevo producto
         </button>

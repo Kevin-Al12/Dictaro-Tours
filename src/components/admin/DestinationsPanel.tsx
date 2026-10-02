@@ -91,7 +91,7 @@ export default function DestinationsPanel() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Paquetes / Destinos</h2>
+          <h2 className="admin-display text-2xl font-bold text-gray-900">Destinos y paquetes</h2>
           <p className="text-xs text-gray-500 mt-0.5">Esto alimenta directamente lo que ve el cliente en la web pública.</p>
         </div>
         <button onClick={openNew} className="btn-primary text-sm py-2 px-4">

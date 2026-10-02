@@ -263,7 +263,7 @@ export default function InvoicesPanel() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Facturas</h2>
+          <h2 className="admin-display text-2xl font-bold text-gray-900">Facturas</h2>
           <p className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-1.5 w-fit">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             Facturación interna — la emisión de NCF/e-CF ante la DGII todavía no está conectada.
