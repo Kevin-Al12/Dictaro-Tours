@@ -1,0 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand:  #C41E2C;
+  --navy:   #111827;
+  --cream:  #F8F4EF;
+}
+
+@layer base {
+  * { @apply box-border; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply bg-white dark:bg-navy-950 text-navy-950 dark:text-white font-sans antialiased;
+    font-feature-settings: 'cv02','cv03','cv04','cv11';
+  }
+
+  h1, h2, h3, h4, h5 { @apply font-display; }
+
+  ::-webkit-scrollbar          { width: 7px; }
+  ::-webkit-scrollbar-track    { @apply bg-gray-100; }
+  ::-webkit-scrollbar-thumb    { @apply bg-brand-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-brand-500; }
+}
+
+@layer components {
+
+  /* ── Gradients ── */
+  .brand-gradient {
+    background: linear-gradient(135deg, #C41E2C, #f51b2b, #a5121e);
+  }
+  .gold-gradient {
+    background: linear-gradient(135deg, #C41E2C, #f51b2b, #a5121e);
+  }
+  .navy-gradient {
+    background: linear-gradient(135deg, #0A1628, #1E3A5F);
+  }
+
+  /* ── Glass ── */
+  .glass      { @apply backdrop-blur-md bg-white/10 border border-white/20; }
+  .glass-dark { @apply backdrop-blur-md bg-navy-950/80 border border-white/10; }
+
+  /* ── Layout ── */
+  .section-padding { @apply py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto; }
+  .card-hover      { @apply transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl; }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-500 text-white font-semibold px-6 py-3 rounded-full
+           transition-all duration-300 hover:shadow-lg hover:shadow-brand-600/30
+           active:scale-95 inline-flex items-center gap-2;
+  }
+  .btn-outline {
+    @apply border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white
+           dark:border-brand-400 dark:text-brand-400 dark:hover:bg-brand-600 dark:hover:text-white
+           font-semibold px-6 py-3 rounded-full transition-all duration-300
+           active:scale-95 inline-flex items-center gap-2;
+  }
+  .btn-gold {
+    @apply bg-gold-500 hover:bg-gold-400 text-white font-semibold px-6 py-3 rounded-full
+           transition-all duration-300 hover:shadow-lg hover:shadow-gold-500/25
+           active:scale-95 inline-flex items-center gap-2;
+  }
+
+  /* ── Text ── */
+  .text-gradient-brand {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #C41E2C, #f77f86);
+  }
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #C41E2C, #f55050);
+  }
+
+  /* ── Shimmer ── */
+  .shimmer-bg {
+    background: linear-gradient(90deg, transparent, rgba(196,30,44,0.1), transparent);
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+}
