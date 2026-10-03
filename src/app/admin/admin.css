@@ -78,6 +78,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Barra lateral: scroll discreto en vez de la barra roja global. */
+.admin-sidebar { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+.admin-sidebar::-webkit-scrollbar { width: 6px; }
+.admin-sidebar::-webkit-scrollbar-track { background: transparent; }
+.admin-sidebar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); }
+
 /* ── Piezas del diseño nuevo ── */
 .admin-card {
   background: var(--a-surface);
