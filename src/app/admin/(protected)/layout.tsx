@@ -79,7 +79,7 @@ function Sidebar({ me, open, onLogout }: { me: AdminIdentity | null; open: boole
   return (
     <aside
       aria-label="Menú principal"
-      className={`fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col gap-5 overflow-y-auto px-3 py-[18px] transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:w-[232px] lg:translate-x-0 ${
+      className={`admin-sidebar fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col gap-5 overflow-y-auto px-3 py-[18px] transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:w-[232px] lg:translate-x-0 ${
         open ? 'translate-x-0 shadow-[0_0_0_100vmax_rgba(0,0,0,.4)] lg:shadow-none' : '-translate-x-full'
       }`}
       style={{ background: 'var(--a-navy)', color: 'var(--a-navy-fg)' }}
@@ -132,7 +132,7 @@ function Sidebar({ me, open, onLogout }: { me: AdminIdentity | null; open: boole
         <div className="min-w-0 flex-1">
           <b className="block truncate text-[13px]">{me?.name ?? ' '}</b>
           <small className="block text-[11px]" style={{ color: 'var(--a-navy-muted)' }}>
-            {me ? ROLE_LABEL[me.role] ?? me.role : ''}
+            {me ? ROLE_LABEL[me.role] ?? 'Rol no válido' : ''}
           </small>
         </div>
         <button

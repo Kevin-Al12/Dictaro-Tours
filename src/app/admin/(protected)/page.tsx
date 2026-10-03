@@ -256,7 +256,7 @@ function Dashboard({ me }: { me: AdminIdentity | null }) {
         <p className="first-letter:uppercase" style={{ color: 'var(--a-muted)' }}>{dateLine} · {summary}</p>
       </div>
 
-      <section className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {fin ? (
           <>
             <Kpi
@@ -275,7 +275,7 @@ function Dashboard({ me }: { me: AdminIdentity | null }) {
         ) : (
           <>
             <Kpi label="Reservas" value={data.bookingCount} extra="Recibidas desde la web" />
-            <Kpi label="Clientes" value={data.clientCount} />
+            <Kpi label="Clientes" value={data.clientCount} extra="Registrados en el sistema" />
           </>
         )}
         <Kpi
@@ -287,11 +287,11 @@ function Dashboard({ me }: { me: AdminIdentity | null }) {
           label="Cotizaciones · 14 días"
           value={trendTotal}
           extra={`${data.acceptedQuoteRate.rate}% aceptadas en total`}
-          chart={
+          chart={trendTotal > 0 && (
             <div className="h-[30px] w-full overflow-hidden">
               <Sparkline data={data.quoteTrend.map((d) => ({ date: d.date, value: d.count }))} width={200} height={30} />
             </div>
-          }
+          )}
         />
       </section>
 
