@@ -61,7 +61,7 @@ try {
     { c: maria, desc: 'Crucero por el Caribe', total: 152000, status: 'enviada', ageDays: 1 },
     { c: jose, desc: 'Boletos Santo Domingo - Miami', total: 38500, status: 'borrador', ageDays: 0 },
     { c: ana, desc: 'Seguro de viaje Europa', total: 9800, status: 'aceptada', ageDays: 3 },
-    { c: laura, desc: 'Jarabacoa aventura', total: 18000, status: 'rechazada', ageDays: 10 },
+    { c: laura, desc: 'Jarabacoa aventura', total: 18000, status: 'vencida', ageDays: 10 },
   ];
   for (const q of quotes) {
     const when = daysFromNow(-q.ageDays);

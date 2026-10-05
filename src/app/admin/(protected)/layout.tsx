@@ -111,7 +111,7 @@ function Sidebar({ me, open, onLogout }: { me: AdminIdentity | null; open: boole
                     type="button"
                     onClick={() => setTab(id)}
                     aria-current={active ? 'page' : undefined}
-                    className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-white/[.06] ${
+                    className={`flex items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-white/[.06] ${
                       active ? 'bg-white/[.11] font-semibold opacity-100' : 'opacity-[.82] hover:opacity-100'
                     }`}
                   >

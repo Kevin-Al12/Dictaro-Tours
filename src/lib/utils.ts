@@ -21,6 +21,13 @@ export function formatDate(dateStr: string) {
   });
 }
 
+// Fecha corta para tablas ("29 sep 2026"). Un "AAAA-MM-DD" se toma en hora local para no correrse un día.
+export function formatShortDate(dateStr: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  const date = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
+  return date.toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' }).replace('.', '');
+}
+
 export function slugify(text: string) {
   return text
     .toLowerCase()

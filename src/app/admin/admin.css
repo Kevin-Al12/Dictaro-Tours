@@ -184,15 +184,76 @@
 .admin-shell[data-admin-theme='dark'] .text-blue-700,
 .admin-shell[data-admin-theme='dark'] .text-blue-600 { color: var(--a-info); }
 
-.admin-shell[data-admin-theme='dark'] input:not([type='checkbox']):not([type='radio']),
-.admin-shell[data-admin-theme='dark'] select,
-.admin-shell[data-admin-theme='dark'] textarea {
+.admin-shell[data-admin-theme='dark'] input:not([type='checkbox']):not([type='radio']):not(.admin-input),
+.admin-shell[data-admin-theme='dark'] select:not(.admin-input):not(.admin-pill),
+.admin-shell[data-admin-theme='dark'] textarea:not(.admin-input) {
   background-color: var(--a-surface-2);
   color: var(--a-fg);
   border-color: var(--a-line);
 }
 .admin-shell[data-admin-theme='dark'] input::placeholder,
 .admin-shell[data-admin-theme='dark'] textarea::placeholder { color: var(--a-faint); }
+
+
+/* ── Módulos: encabezado, tablas, formularios ── */
+.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.admin-table th {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--a-faint);
+  font-weight: 600; text-align: left; padding: 10px 16px; border-bottom: 1px solid var(--a-line); white-space: nowrap;
+}
+.admin-table td { padding: 11px 16px; border-bottom: 1px solid var(--a-line); vertical-align: middle; color: var(--a-fg); }
+.admin-table tbody tr:last-child td { border-bottom: 0; }
+.admin-table tbody tr { transition: background 0.12s ease; }
+.admin-table tbody tr:hover { background: var(--a-surface-2); }
+.admin-table .r { text-align: right; }
+.admin-table .muted { color: var(--a-muted); }
+.admin-table .nowrap { white-space: nowrap; }
+
+.admin-avatar {
+  width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  font-size: 11px; font-weight: 700; color: #fff; background: #3f66a9;
+}
+
+.admin-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--a-muted); margin-bottom: 5px; }
+.admin-input {
+  width: 100%; padding: 8px 11px; border-radius: 8px; font-size: 14px;
+  background: var(--a-surface); color: var(--a-fg); border: 1px solid var(--a-line);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.admin-input::placeholder { color: var(--a-faint); }
+.admin-input:focus { outline: none; border-color: var(--a-info); box-shadow: 0 0 0 3px var(--a-info-soft); }
+.admin-input:disabled { opacity: 0.6; }
+textarea.admin-input { resize: vertical; }
+.admin-input.pl-8 { padding-left: 32px; }
+
+.admin-icon-btn {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 7px;
+  color: var(--a-faint); transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-icon-btn:hover { background: var(--a-surface-2); color: var(--a-fg); }
+.admin-icon-btn[data-danger]:hover { background: var(--a-bad-soft); color: var(--a-bad); }
+
+.admin-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.admin-btn[data-variant='danger'] { color: var(--a-bad); }
+.admin-btn[data-variant='danger']:hover { background: var(--a-bad-soft); }
+
+/* Selector de estado con forma de pastilla. */
+select.admin-pill { appearance: none; border: 0; cursor: pointer; padding-right: 22px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 11px) 50%, calc(100% - 7px) 50%; background-size: 4px 4px; background-repeat: no-repeat; }
+select.admin-pill::before { display: none; }
+
+.admin-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  border: 1px solid var(--a-line); background: var(--a-surface); color: var(--a-muted); white-space: nowrap;
+}
+.admin-chip[aria-pressed='true'] { background: var(--a-fg); border-color: var(--a-fg); color: var(--a-surface); }
+.admin-chip .count { font-weight: 500; opacity: 0.7; }
+
+.admin-shell .btn-primary {
+  background: var(--a-brand); color: #fff; border-radius: 8px; padding: 8px 14px; font-size: 13px; box-shadow: none;
+}
+.admin-shell .btn-primary:hover { filter: brightness(1.07); box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .admin-shell *,

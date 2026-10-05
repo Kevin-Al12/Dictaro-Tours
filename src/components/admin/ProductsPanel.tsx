@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Edit3, Trash2, Package } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Edit3, Trash2, Package, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatPrice } from '@/lib/utils';
 import { useAdminList } from '@/hooks/useAdminList';
 import { deleteAdminItem } from '@/lib/adminActions';
 import AdminModal from './AdminModal';
 import AdminTableShell from './AdminTableShell';
+import { PageHeader, Pill, IconButton, Field, FilterChips } from './ui';
 
 interface Product {
   id: string;
@@ -27,6 +28,25 @@ export default function ProductsPanel() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [category, setCategory] = useState<string>('all');
+  const [query, setQuery] = useState('');
+
+  const chipOptions = useMemo(() => {
+    const present = Array.from(new Set([...CATEGORIES, ...products.map((p) => p.category)]))
+      .filter((c) => products.some((p) => p.category === c));
+    return [
+      { value: 'all', label: 'Todos', count: products.length },
+      ...present.map((c) => ({ value: c, label: c, count: products.filter((p) => p.category === c).length })),
+    ];
+  }, [products]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return products.filter((p) =>
+      (category === 'all' || p.category === category) &&
+      (!q || `${p.code} ${p.description}`.toLowerCase().includes(q)),
+    );
+  }, [products, category, query]);
 
   function openNew() {
     setEditing(null);
@@ -68,46 +88,57 @@ export default function ProductsPanel() {
     reload();
   }
 
+  const newButton = (
+    <button type="button" onClick={openNew} className="admin-btn" data-variant="primary">
+      <Plus className="h-4 w-4" />Nuevo producto
+    </button>
+  );
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="admin-display text-2xl font-bold text-gray-900">Productos y servicios</h2>
-        <button onClick={openNew} className="btn-primary text-sm py-2 px-4">
-          <Plus className="w-4 h-4" />Nuevo producto
-        </button>
-      </div>
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Productos y servicios"
+        subtitle={loading ? 'Cargando…' : `${products.length} ${products.length === 1 ? 'producto en el catálogo' : 'productos en el catálogo'}`}
+        actions={newButton}
+      />
 
       <AdminTableShell
         loading={loading}
-        isEmpty={products.length === 0}
+        isEmpty={visible.length === 0}
         emptyIcon={Package}
-        emptyMessage="Aún no hay productos. Agrega el primero."
+        emptyMessage={products.length === 0 ? 'Aún no hay productos. Agrega el primero.' : 'Ningún producto coincide con el filtro.'}
+        emptyAction={products.length === 0 ? newButton : undefined}
+        toolbar={
+          <>
+            <FilterChips value={category} onChange={setCategory} options={chipOptions} />
+            <label className="relative w-full sm:ml-auto sm:w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--a-faint)' }} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por código o descripción…" aria-label="Buscar productos" className="admin-input pl-8" />
+            </label>
+          </>
+        }
       >
-        <table className="w-full">
+        <table className="admin-table">
           <thead>
-            <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-              <th className="px-4 py-2 text-left">Código</th>
-              <th className="px-4 py-2 text-left">Descripción</th>
-              <th className="px-4 py-2 text-left">Categoría</th>
-              <th className="px-4 py-2 text-left">Precio</th>
-              <th className="px-4 py-2 text-left">Acciones</th>
+            <tr>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th>Categoría</th>
+              <th className="r">Precio</th>
+              <th className="r"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {products.map((p) => (
-              <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.code}</td>
-                <td className="px-4 py-2.5 text-sm font-medium text-gray-900">{p.description}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-500">{p.category}</td>
-                <td className="px-4 py-2.5 text-sm font-semibold text-gray-900">{formatPrice(p.price)}</td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(p)} className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all">
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(p)} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+          <tbody>
+            {visible.map((p) => (
+              <tr key={p.id}>
+                <td className="nowrap muted font-mono text-xs">{p.code}</td>
+                <td className="font-medium">{p.description}</td>
+                <td className="nowrap"><Pill tone="mute">{p.category}</Pill></td>
+                <td className="r nowrap admin-num font-semibold">{formatPrice(p.price)}</td>
+                <td className="r">
+                  <div className="flex items-center justify-end gap-1">
+                    <IconButton icon={Edit3} label="Editar" onClick={() => openEdit(p)} />
+                    <IconButton icon={Trash2} label="Eliminar" danger onClick={() => handleDelete(p)} />
                   </div>
                 </td>
               </tr>
@@ -116,38 +147,35 @@ export default function ProductsPanel() {
         </table>
       </AdminTableShell>
 
-      <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar producto' : 'Nuevo producto'}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Código</label>
-            <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })}
-              placeholder="000123"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descripción</label>
-            <input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Habitación doble Hard Rock"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoría</label>
-              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 appearance-none">
+      <AdminModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editing ? 'Editar producto' : 'Nuevo producto'}
+        subtitle={editing ? editing.code : 'Se usará al armar cotizaciones y facturas.'}
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <Field label="Código">
+              <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="000123" className="admin-input font-mono" />
+            </Field>
+            <Field label="Categoría">
+              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="admin-input">
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Precio (DOP)</label>
-              <input required type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })}
-                placeholder="0.00"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
+            </Field>
           </div>
-          <button type="submit" disabled={saving} className="btn-primary w-full justify-center py-3 disabled:opacity-60">
-            {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear producto'}
-          </button>
+          <Field label="Descripción">
+            <input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Habitación doble Hard Rock" className="admin-input" />
+          </Field>
+          <Field label="Precio (DOP)">
+            <input required type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="0.00" className="admin-input admin-num" />
+          </Field>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" className="admin-btn" onClick={() => setModalOpen(false)}>Cancelar</button>
+            <button type="submit" disabled={saving} className="admin-btn" data-variant="primary">
+              {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear producto'}
+            </button>
+          </div>
         </form>
       </AdminModal>
     </div>

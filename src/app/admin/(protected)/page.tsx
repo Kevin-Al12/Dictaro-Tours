@@ -14,6 +14,7 @@ import InvoicesPanel from '@/components/admin/InvoicesPanel';
 import ReceivablesPanel from '@/components/admin/ReceivablesPanel';
 import CompanySettingsPanel from '@/components/admin/CompanySettingsPanel';
 import AppearancePanel from '@/components/admin/AppearancePanel';
+import { PageHeader } from '@/components/admin/ui';
 import DonutChart from '@/components/admin/charts/DonutChart';
 import Sparkline from '@/components/admin/charts/Sparkline';
 
@@ -414,10 +415,7 @@ function RecentBookings({ bookings }: { bookings: DashboardBooking[] }) {
 function Settings({ me }: { me: AdminIdentity | null }) {
   return (
     <div className="flex flex-col gap-[18px]">
-      <div>
-        <h1 className="admin-display text-[23px] font-bold sm:text-[28px]">Configuración</h1>
-        <p style={{ color: 'var(--a-muted)' }}>Apariencia del panel y datos de la empresa.</p>
-      </div>
+      <PageHeader title="Configuración" subtitle="Empresa, apariencia y seguridad." />
       <AppearancePanel />
       {hasFullAccess(me?.role) && <CompanySettingsPanel />}
     </div>

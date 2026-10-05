@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Edit3, Trash2, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Edit3, Trash2, Users, Search, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAdminList } from '@/hooks/useAdminList';
 import { deleteAdminItem } from '@/lib/adminActions';
 import AdminModal from './AdminModal';
 import AdminTableShell from './AdminTableShell';
+import { PageHeader, Who, IconButton, Field } from './ui';
 
 interface Client {
   id: string;
@@ -25,6 +26,13 @@ export default function ClientsPanel() {
   const [editing, setEditing] = useState<Client | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter((c) => `${c.name} ${c.phone ?? ''} ${c.email ?? ''} ${c.document ?? ''}`.toLowerCase().includes(q));
+  }, [clients, query]);
 
   function openNew() {
     setEditing(null);
@@ -66,91 +74,100 @@ export default function ClientsPanel() {
     reload();
   }
 
+  const newButton = (
+    <button type="button" onClick={openNew} className="admin-btn" data-variant="primary">
+      <Plus className="h-4 w-4" />Nuevo cliente
+    </button>
+  );
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="admin-display text-2xl font-bold text-gray-900">Clientes</h2>
-        <button onClick={openNew} className="btn-primary text-sm py-2 px-4">
-          <Plus className="w-4 h-4" />Nuevo cliente
-        </button>
-      </div>
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Clientes"
+        subtitle={loading ? 'Cargando…' : `${clients.length} ${clients.length === 1 ? 'cliente registrado' : 'clientes registrados'}`}
+        actions={newButton}
+      />
 
       <AdminTableShell
         loading={loading}
-        isEmpty={clients.length === 0}
+        isEmpty={visible.length === 0}
         emptyIcon={Users}
-        emptyMessage="Aún no hay clientes. Agrega el primero."
+        emptyMessage={clients.length === 0 ? 'Aún no hay clientes. Agrega el primero.' : 'Ningún cliente coincide con la búsqueda.'}
+        emptyAction={clients.length === 0 ? newButton : undefined}
+        toolbar={
+          <label className="relative w-full sm:w-72">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--a-faint)' }} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nombre, teléfono o documento…" aria-label="Buscar clientes" className="admin-input pl-8" />
+          </label>
+        }
       >
-        <table className="w-full">
+        <table className="admin-table">
           <thead>
-            <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-              <th className="px-4 py-2 text-left">Nombre</th>
-              <th className="px-4 py-2 text-left">Teléfono</th>
-              <th className="px-4 py-2 text-left">Correo</th>
-              <th className="px-4 py-2 text-left">Documento</th>
-              <th className="px-4 py-2 text-left">Acciones</th>
+            <tr>
+              <th>Cliente</th>
+              <th>Teléfono</th>
+              <th>Cédula / pasaporte</th>
+              <th className="r"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {clients.map((c) => (
-              <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 text-sm font-medium text-gray-900">{c.name}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-500">{c.phone || '—'}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-500">{c.email || '—'}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-500">{c.document || '—'}</td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(c)} className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all">
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(c)} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+          <tbody>
+            {visible.map((c) => {
+              const wa = c.phone ? c.phone.replace(/\D/g, '') : '';
+              return (
+                <tr key={c.id}>
+                  <td><Who name={c.name} detail={c.email || undefined} /></td>
+                  <td className="nowrap admin-num">{c.phone || <span className="muted">—</span>}</td>
+                  <td className="nowrap admin-num">{c.document || <span className="muted">—</span>}</td>
+                  <td className="r">
+                    <div className="flex items-center justify-end gap-1">
+                      {wa && (
+                        <a
+                          href={`https://wa.me/${wa.length === 10 ? `1${wa}` : wa}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="admin-icon-btn"
+                          aria-label={`Escribir a ${c.name} por WhatsApp`}
+                          title="WhatsApp"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </a>
+                      )}
+                      <IconButton icon={Edit3} label="Editar" onClick={() => openEdit(c)} />
+                      <IconButton icon={Trash2} label="Eliminar" danger onClick={() => handleDelete(c)} />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </AdminTableShell>
 
       <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar cliente' : 'Nuevo cliente'}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre completo</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Juan Pérez"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+          <Field label="Nombre completo">
+            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Juan Pérez" className="admin-input" />
+          </Field>
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <Field label="Teléfono">
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="809-000-0000" className="admin-input" />
+            </Field>
+            <Field label="Cédula / pasaporte">
+              <input value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} placeholder="001-0000000-0" className="admin-input" />
+            </Field>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Teléfono</label>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="+1 (809) 000-0000"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Cédula/Pasaporte</label>
-              <input value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })}
-                placeholder="001-0000000-0"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
+          <Field label="Correo">
+            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="cliente@correo.com" className="admin-input" />
+          </Field>
+          <Field label="Notas">
+            <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Preferencias, historial, etc." className="admin-input" />
+          </Field>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" className="admin-btn" onClick={() => setModalOpen(false)}>Cancelar</button>
+            <button type="submit" disabled={saving} className="admin-btn" data-variant="primary">
+              {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear cliente'}
+            </button>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Correo</label>
-            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="cliente@correo.com"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notas</label>
-            <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Preferencias, historial, etc."
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 resize-none" />
-          </div>
-          <button type="submit" disabled={saving} className="btn-primary w-full justify-center py-3 disabled:opacity-60">
-            {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear cliente'}
-          </button>
         </form>
       </AdminModal>
     </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Settings, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Field } from './ui';
 
 interface CompanySettings {
   legalName: string;
@@ -71,73 +72,68 @@ export default function CompanySettingsPanel() {
     toast.success('Configuración guardada');
   }
 
-  if (errorMessage) {
-    return (
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
-        <Settings className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-500 text-sm">{errorMessage}</p>
+  const card = (body: React.ReactNode) => (
+    <section className="admin-card overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3.5" style={{ borderBottom: '1px solid var(--a-line)' }}>
+        <h2 className="text-[14.5px] font-bold">Datos de la empresa</h2>
+        <span className="ml-auto text-xs" style={{ color: 'var(--a-muted)' }}>Aparecen en facturas y cotizaciones</span>
       </div>
+      {body}
+    </section>
+  );
+
+  if (errorMessage) {
+    return card(
+      <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+        <span className="grid h-11 w-11 place-items-center rounded-full" style={{ background: 'var(--a-surface-2)', color: 'var(--a-faint)' }}>
+          <Settings className="h-5 w-5" />
+        </span>
+        <p className="max-w-sm text-sm" style={{ color: 'var(--a-muted)' }}>{errorMessage}</p>
+      </div>,
     );
   }
 
   if (loading) {
-    return <div className="py-6 text-center text-sm text-gray-400">Cargando...</div>;
+    return card(<div className="py-10 text-center text-sm" style={{ color: 'var(--a-faint)' }}>Cargando…</div>);
   }
 
-  return (
-    <div className="space-y-3 max-w-xl">
-      <h2 className="text-base font-semibold text-gray-900">Configuración de la empresa</h2>
-
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Razón social</label>
-            <input value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">RNC</label>
-              <input value={form.rnc} onChange={(e) => setForm({ ...form, rnc: e.target.value })}
-                placeholder="000-00000-0"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Tasa de ITBIS (%)</label>
-              <input type="number" step="0.01" min="0" max="100" value={form.itbisRate}
-                onChange={(e) => setForm({ ...form, itbisRate: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Dirección fiscal</label>
-            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Logo (URL)</label>
-            <input value={form.logoUrl} onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
-              placeholder="https://..."
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Proveedor de e-CF</label>
-            <input value={form.ncfProvider} onChange={(e) => setForm({ ...form, ncfProvider: e.target.value })}
-              placeholder="Aún sin definir"
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            <p className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-2">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              La DGII exige factura electrónica desde el 15 de noviembre de 2026. Este campo es solo
-              informativo por ahora — todavía no hay conexión real con ningún proveedor de e-CF.
-            </p>
-          </div>
-
-          <button type="submit" disabled={saving} className="btn-primary w-full justify-center py-3 disabled:opacity-60">
-            {saving ? 'Guardando...' : 'Guardar configuración'}
-          </button>
-        </form>
+  return card(
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 px-4 py-4">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+        <Field label="Razón social" className="sm:col-span-2">
+          <input value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })} className="admin-input" />
+        </Field>
+        <Field label="RNC">
+          <input value={form.rnc} onChange={(e) => setForm({ ...form, rnc: e.target.value })} placeholder="000-00000-0" className="admin-input admin-num" />
+        </Field>
+        <Field label="Tasa de ITBIS (%)">
+          <input type="number" step="0.01" min="0" max="100" value={form.itbisRate}
+            onChange={(e) => setForm({ ...form, itbisRate: e.target.value })} className="admin-input admin-num" />
+        </Field>
+        <Field label="Dirección fiscal" className="sm:col-span-2">
+          <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="admin-input" />
+        </Field>
+        <Field label="Logo (URL)">
+          <input value={form.logoUrl} onChange={(e) => setForm({ ...form, logoUrl: e.target.value })} placeholder="https://..." className="admin-input" />
+        </Field>
+        <Field label="Proveedor de e-CF">
+          <input value={form.ncfProvider} onChange={(e) => setForm({ ...form, ncfProvider: e.target.value })} placeholder="Aún sin definir" className="admin-input" />
+        </Field>
       </div>
-    </div>
+
+      <p className="flex items-start gap-2 rounded-lg px-3 py-2.5 text-[13px]" style={{ background: 'var(--a-warn-soft)', color: 'var(--a-warn)' }}>
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>
+          La DGII exige factura electrónica desde el 15 de noviembre de 2026. El proveedor de e-CF es solo
+          informativo por ahora — todavía no hay conexión real con ningún proveedor.
+        </span>
+      </p>
+
+      <div className="flex justify-end pt-1">
+        <button type="submit" disabled={saving} className="admin-btn" data-variant="primary">
+          {saving ? 'Guardando…' : 'Guardar configuración'}
+        </button>
+      </div>
+    </form>,
   );
 }

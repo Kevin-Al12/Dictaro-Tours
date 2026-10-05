@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Plus, Trash2, Receipt, Eye, PlusCircle, AlertTriangle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Trash2, Receipt, Eye, PlusCircle, AlertTriangle, Search, Send, Wallet, Ban } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDate, formatShortDate } from '@/lib/utils';
 import { useAdminList } from '@/hooks/useAdminList';
 import { deleteAdminItem } from '@/lib/adminActions';
 import { hasFullAccess } from '@/lib/adminRoleConstants';
 import AdminModal from './AdminModal';
 import AdminTableShell from './AdminTableShell';
+import { PageHeader, Who, Pill, IconButton, Field, FilterChips, DetailRow, type Tone } from './ui';
 
 interface Client {
   id: string;
@@ -72,13 +73,19 @@ const STATUS_LABEL: Record<string, string> = {
   anulada: 'Anulada',
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  borrador: 'bg-gray-100 text-gray-600',
-  emitida: 'bg-blue-100 text-blue-600',
-  pagada_parcial: 'bg-yellow-100 text-yellow-700',
-  pagada: 'bg-green-100 text-green-700',
-  anulada: 'bg-red-100 text-red-600',
+const STATUS_TONE: Record<string, Tone> = {
+  borrador: 'mute',
+  emitida: 'info',
+  pagada_parcial: 'warn',
+  pagada: 'ok',
+  anulada: 'bad',
 };
+
+type Filter = 'todas' | keyof typeof STATUS_LABEL;
+
+function invoiceCode(inv: { number: number | null }) {
+  return inv.number ? `FAC-${String(inv.number).padStart(4, '0')}` : 'Borrador';
+}
 
 const PAYMENT_METHODS = ['efectivo', 'transferencia', 'tarjeta', 'cheque'];
 
@@ -104,6 +111,8 @@ export default function InvoicesPanel() {
   const [voidReason, setVoidReason] = useState('');
   const [showVoidForm, setShowVoidForm] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [filter, setFilter] = useState<Filter>('todas');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     fetch('/api/admin/me')
@@ -259,136 +268,184 @@ export default function InvoicesPanel() {
     reload();
   }
 
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const inv of invoices) c[inv.status] = (c[inv.status] ?? 0) + 1;
+    return c;
+  }, [invoices]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return invoices.filter((inv) =>
+      (filter === 'todas' || inv.status === filter) &&
+      (!q || `${invoiceCode(inv)} ${inv.client.name}`.toLowerCase().includes(q)),
+    );
+  }, [invoices, filter, query]);
+
+  const porCobrar = (counts.emitida ?? 0) + (counts.pagada_parcial ?? 0);
+  const emitidas = invoices.filter((inv) => inv.number).length;
+  const viewingBalance = viewing ? Math.max(viewing.total - viewing.amountPaid, 0) : 0;
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="admin-display text-2xl font-bold text-gray-900">Facturas</h2>
-          <p className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-1.5 w-fit">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-            Facturación interna — la emisión de NCF/e-CF ante la DGII todavía no está conectada.
-          </p>
-        </div>
-        <button onClick={openNew} className="btn-primary text-sm py-2 px-4">
-          <Plus className="w-4 h-4" />Nueva factura
-        </button>
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Facturas"
+        subtitle={loading ? 'Cargando…' : `${emitidas} emitidas · ${porCobrar} por cobrar · ${counts.borrador ?? 0} en borrador`}
+        actions={
+          <button type="button" onClick={openNew} className="admin-btn" data-variant="primary">
+            <Plus className="h-4 w-4" />Nueva factura
+          </button>
+        }
+      />
+
+      <div
+        className="admin-card flex items-start gap-2.5 px-4 py-3 text-sm"
+        style={{ borderLeft: '4px solid var(--a-warn)', background: 'var(--a-warn-soft)' }}
+      >
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--a-warn)' }} />
+        <p style={{ color: 'var(--a-fg)' }}>
+          <b>Facturación interna.</b>{' '}
+          <span style={{ color: 'var(--a-muted)' }}>Estas facturas son de control interno: la emisión de NCF/e-CF ante la DGII todavía no está conectada.</span>
+        </p>
       </div>
 
       <AdminTableShell
         loading={loading}
-        isEmpty={invoices.length === 0}
+        isEmpty={visible.length === 0}
         emptyIcon={Receipt}
-        emptyMessage="Aún no hay facturas. Crea una manual o convierte una cotización aceptada."
+        emptyMessage={invoices.length === 0 ? 'Aún no hay facturas. Crea una manual o convierte una cotización aceptada.' : 'Ninguna factura coincide con el filtro.'}
+        emptyAction={invoices.length === 0 ? (
+          <button type="button" onClick={openNew} className="admin-btn" data-variant="primary" data-size="sm">
+            <Plus className="h-3.5 w-3.5" />Nueva factura
+          </button>
+        ) : undefined}
+        toolbar={
+          <>
+            <FilterChips<Filter>
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'todas', label: 'Todas', count: invoices.length },
+                ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value: value as Filter, label, count: counts[value] ?? 0 })),
+              ]}
+            />
+            <label className="relative ml-auto w-full sm:w-60">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--a-faint)' }} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar número o cliente…" aria-label="Buscar facturas" className="admin-input pl-8" />
+            </label>
+          </>
+        }
       >
-        <table className="w-full">
+        <table className="admin-table">
           <thead>
-            <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-              <th className="px-4 py-2 text-left">N°</th>
-              <th className="px-4 py-2 text-left">Cliente</th>
-              <th className="px-4 py-2 text-left">Fecha</th>
-              <th className="px-4 py-2 text-left">Total</th>
-              <th className="px-4 py-2 text-left">Saldo</th>
-              <th className="px-4 py-2 text-left">Estado</th>
-              <th className="px-4 py-2 text-left">Acciones</th>
+            <tr>
+              <th>N°</th>
+              <th>Cliente</th>
+              <th>Fecha</th>
+              <th className="r">Total</th>
+              <th className="r">Saldo</th>
+              <th>Estado</th>
+              <th className="r"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {invoices.map((inv) => (
-              <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 font-mono text-xs text-gray-400">
-                  {inv.number ? `FAC-${String(inv.number).padStart(4, '0')}` : 'Borrador'}
-                </td>
-                <td className="px-4 py-2.5 text-sm font-medium text-gray-900">{inv.client.name}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-500">{formatDate(inv.issueDate)}</td>
-                <td className="px-4 py-2.5 text-sm font-semibold text-gray-900">{formatPrice(inv.total)}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-600">{formatPrice(Math.max(inv.total - inv.amountPaid, 0))}</td>
-                <td className="px-4 py-2.5">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_COLOR[inv.status]}`}>
-                    {STATUS_LABEL[inv.status] || inv.status}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5">
-                  <button onClick={() => openView(inv)} className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all">
-                    <Eye className="w-4 h-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
+          <tbody>
+            {visible.map((inv) => {
+              const balance = Math.max(inv.total - inv.amountPaid, 0);
+              return (
+                <tr key={inv.id}>
+                  <td className="nowrap admin-num">
+                    {inv.number ? <b>{invoiceCode(inv)}</b> : <span className="muted">Borrador</span>}
+                  </td>
+                  <td><Who name={inv.client.name} detail={inv.dueDate ? `Vence ${formatShortDate(inv.dueDate)}` : undefined} /></td>
+                  <td className="nowrap admin-num">{formatShortDate(inv.issueDate)}</td>
+                  <td className="r admin-num nowrap"><b>{formatPrice(inv.total)}</b></td>
+                  <td className="r admin-num nowrap" style={balance > 0 && inv.status !== 'anulada' ? { color: 'var(--a-bad)' } : { color: 'var(--a-muted)' }}>
+                    {formatPrice(balance)}
+                  </td>
+                  <td><Pill tone={STATUS_TONE[inv.status] ?? 'mute'}>{STATUS_LABEL[inv.status] ?? inv.status}</Pill></td>
+                  <td className="r">
+                    <div className="flex items-center justify-end gap-1">
+                      <IconButton icon={Eye} label="Ver factura" onClick={() => openView(inv)} />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </AdminTableShell>
 
       {/* Nueva factura */}
-      <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title="Nueva factura" maxWidth="max-w-2xl">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Cliente</label>
-              <select required value={clientId} onChange={(e) => setClientId(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 appearance-none">
+      <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title="Nueva factura" subtitle="Se crea en borrador; podrás emitirla después." maxWidth="max-w-2xl">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <Field label="Cliente">
+              <select required value={clientId} onChange={(e) => setClientId(e.target.value)} className="admin-input">
                 <option value="">Selecciona un cliente</option>
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Fecha de vencimiento</label>
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
+            </Field>
+            <Field label="Fecha de vencimiento">
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="admin-input" />
+            </Field>
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">Productos y servicios</label>
-              <button type="button" onClick={() => setItems([...items, emptyItem()])}
-                className="flex items-center gap-1 text-xs font-semibold text-gray-600 hover:text-gray-900 transition-colors">
-                <PlusCircle className="w-3.5 h-3.5" />Agregar ítem
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="admin-label" style={{ marginBottom: 0 }}>Productos y servicios</span>
+              <button type="button" onClick={() => setItems([...items, emptyItem()])} className="admin-btn" data-size="sm">
+                <PlusCircle className="h-3.5 w-3.5" />Agregar ítem
               </button>
             </div>
-            <div className="space-y-2">
-              {items.map((item, i) => (
-                <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <div className="flex-1 space-y-2">
-                    <select value={item.productId} onChange={(e) => pickProduct(i, e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-xs text-gray-900 focus:outline-none focus:border-gold-500 appearance-none">
-                      <option value="">— Producto libre (escribir abajo) —</option>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.description} · {formatPrice(p.price)}</option>)}
-                    </select>
-                    <input required value={item.description} onChange={(e) => updateItem(i, { description: e.target.value })}
-                      placeholder="Descripción"
-                      className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-                    <div className="flex gap-2">
-                      <input required type="number" step="0.01" min="0" value={item.unitPrice} onChange={(e) => updateItem(i, { unitPrice: e.target.value })}
-                        placeholder="Precio"
-                        className="w-1/2 px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-                      <input required type="number" min="1" value={item.quantity} onChange={(e) => updateItem(i, { quantity: e.target.value })}
-                        placeholder="Cant."
-                        className="w-1/2 px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
+            <div className="flex flex-col gap-2">
+              {items.map((item, i) => {
+                const lineTotal = (parseFloat(item.unitPrice) || 0) * (parseInt(item.quantity, 10) || 0);
+                return (
+                  <div key={i} className="rounded-lg p-3" style={{ background: 'var(--a-surface-2)', border: '1px solid var(--a-line)' }}>
+                    <div className="flex items-start gap-2">
+                      <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Field label="Producto" className="sm:col-span-2">
+                          <select value={item.productId} onChange={(e) => pickProduct(i, e.target.value)} className="admin-input">
+                            <option value="">— Producto libre (escribir abajo) —</option>
+                            {products.map((p) => <option key={p.id} value={p.id}>{p.description} · {formatPrice(p.price)}</option>)}
+                          </select>
+                        </Field>
+                        <Field label="Descripción" className="sm:col-span-2">
+                          <input required value={item.description} onChange={(e) => updateItem(i, { description: e.target.value })} placeholder="Descripción" className="admin-input" />
+                        </Field>
+                        <Field label="Precio unitario">
+                          <input required type="number" step="0.01" min="0" value={item.unitPrice} onChange={(e) => updateItem(i, { unitPrice: e.target.value })} placeholder="0.00" className="admin-input admin-num" />
+                        </Field>
+                        <Field label="Cantidad">
+                          <input required type="number" min="1" value={item.quantity} onChange={(e) => updateItem(i, { quantity: e.target.value })} placeholder="1" className="admin-input admin-num" />
+                        </Field>
+                      </div>
+                      <IconButton icon={Trash2} label="Quitar ítem" danger disabled={items.length === 1} onClick={() => removeItem(i)} />
+                    </div>
+                    <div className="mt-2 text-right text-xs" style={{ color: 'var(--a-muted)' }}>
+                      Importe <span className="admin-num font-semibold" style={{ color: 'var(--a-fg)' }}>{formatPrice(lineTotal)}</span>
                     </div>
                   </div>
-                  <button type="button" onClick={() => removeItem(i)} disabled={items.length === 1}
-                    className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-30">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notas</label>
-            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 resize-none" />
+          <Field label="Notas">
+            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Condiciones, referencia de la reserva, etc." className="admin-input" />
+          </Field>
+
+          <div className="flex items-center justify-between rounded-lg px-3.5 py-3" style={{ background: 'var(--a-surface-2)', border: '1px solid var(--a-line)' }}>
+            <span className="text-sm font-semibold" style={{ color: 'var(--a-muted)' }}>Total (ITBIS incluido)</span>
+            <span className="admin-display admin-num text-xl font-bold">{formatPrice(draftTotal)}</span>
           </div>
 
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">Total (ITBIS incluido)</span>
-            <span className="text-lg font-bold text-gray-900">{formatPrice(draftTotal)}</span>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" className="admin-btn" onClick={() => setModalOpen(false)}>Cancelar</button>
+            <button type="submit" disabled={saving} className="admin-btn" data-variant="primary">
+              {saving ? 'Guardando…' : 'Crear factura en borrador'}
+            </button>
           </div>
-
-          <button type="submit" disabled={saving} className="btn-primary w-full justify-center py-3 disabled:opacity-60">
-            {saving ? 'Guardando...' : 'Crear factura en borrador'}
-          </button>
         </form>
       </AdminModal>
 
@@ -397,132 +454,169 @@ export default function InvoicesPanel() {
         open={Boolean(viewing)}
         onClose={() => setViewing(null)}
         title={viewing ? (
-          <div>
-            <div className="flex items-center gap-2">
-              <span>{viewing.number ? `FAC-${String(viewing.number).padStart(4, '0')}` : 'Borrador'}</span>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLOR[viewing.status]}`}>
-                {STATUS_LABEL[viewing.status]}
-              </span>
-            </div>
-            <p className="text-sm font-normal text-gray-500 mt-0.5">
-              {viewing.client.name} · {formatDate(viewing.issueDate)}
-            </p>
-          </div>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="admin-num">{invoiceCode(viewing)}</span>
+            <Pill tone={STATUS_TONE[viewing.status] ?? 'mute'}>{STATUS_LABEL[viewing.status] ?? viewing.status}</Pill>
+          </span>
         ) : ''}
-        maxWidth="max-w-lg"
+        subtitle={viewing ? `${viewing.client.name} · ${formatDate(viewing.issueDate)}` : undefined}
+        maxWidth="max-w-xl"
       >
         {viewing && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              {viewing.items.map((it) => (
-                <div key={it.id} className="flex justify-between text-sm py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{it.description} × {it.quantity}</span>
-                  <span className="font-medium text-gray-900">{formatPrice(it.unitPrice * it.quantity)}</span>
-                </div>
-              ))}
+          <div className="flex flex-col gap-4">
+            <div>
+              <DetailRow label="Cliente">{viewing.client.name}</DetailRow>
+              <DetailRow label="Fecha de emisión">{formatDate(viewing.issueDate)}</DetailRow>
+              {viewing.dueDate && <DetailRow label="Vencimiento">{formatDate(viewing.dueDate)}</DetailRow>}
+              <DetailRow label="Estado"><Pill tone={STATUS_TONE[viewing.status] ?? 'mute'}>{STATUS_LABEL[viewing.status] ?? viewing.status}</Pill></DetailRow>
             </div>
 
-            <div className="text-sm space-y-1">
-              <div className="flex justify-between text-gray-500">
-                <span>Subtotal</span><span>{formatPrice(viewing.subtotal)}</span>
+            <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--a-line)' }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Descripción</th>
+                    <th className="r">Cant.</th>
+                    <th className="r">Precio</th>
+                    <th className="r">Importe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewing.items.map((it) => (
+                    <tr key={it.id}>
+                      <td>{it.description}</td>
+                      <td className="r admin-num">{it.quantity}</td>
+                      <td className="r admin-num nowrap">{formatPrice(it.unitPrice)}</td>
+                      <td className="r admin-num nowrap"><b>{formatPrice(it.unitPrice * it.quantity)}</b></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="ml-auto flex w-full flex-col gap-1 text-sm sm:w-72">
+              <div className="flex justify-between" style={{ color: 'var(--a-muted)' }}>
+                <span>Subtotal</span><span className="admin-num">{formatPrice(viewing.subtotal)}</span>
               </div>
-              <div className="flex justify-between text-gray-500">
-                <span>ITBIS</span><span>{formatPrice(viewing.itbis)}</span>
+              <div className="flex justify-between" style={{ color: 'var(--a-muted)' }}>
+                <span>ITBIS</span><span className="admin-num">{formatPrice(viewing.itbis)}</span>
               </div>
-              <div className="flex justify-between font-bold text-gray-900 text-base pt-1 border-t border-gray-200">
-                <span>Total</span><span>{formatPrice(viewing.total)}</span>
+              <div className="mt-1 flex items-center justify-between pt-2" style={{ borderTop: '1px solid var(--a-line)' }}>
+                <span className="font-semibold">Total</span>
+                <span className="admin-display admin-num text-xl font-bold">{formatPrice(viewing.total)}</span>
               </div>
-              <div className="flex justify-between text-green-600">
-                <span>Pagado</span><span>{formatPrice(viewing.amountPaid)}</span>
+              <div className="flex justify-between" style={{ color: 'var(--a-ok)' }}>
+                <span>Pagado</span><span className="admin-num">{formatPrice(viewing.amountPaid)}</span>
               </div>
-              <div className="flex justify-between font-semibold text-gray-900">
-                <span>Saldo pendiente</span><span>{formatPrice(Math.max(viewing.total - viewing.amountPaid, 0))}</span>
+              <div className="flex justify-between font-semibold" style={{ color: viewingBalance > 0 ? 'var(--a-bad)' : 'var(--a-fg)' }}>
+                <span>Saldo</span><span className="admin-num">{formatPrice(viewingBalance)}</span>
               </div>
             </div>
+
+            {viewing.notes && <p className="text-sm italic" style={{ color: 'var(--a-muted)' }}>&ldquo;{viewing.notes}&rdquo;</p>}
 
             {viewing.payments.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Pagos recibidos</p>
-                <div className="space-y-1.5">
-                  {viewing.payments.map((p) => (
-                    <div key={p.id} className="flex justify-between text-sm bg-gray-50 rounded-lg px-3 py-2">
-                      <div>
-                        <span className="text-gray-900 font-medium capitalize">{p.method}</span>
-                        <span className="text-gray-400 text-xs ml-2">{formatDate(p.receivedAt)}</span>
-                      </div>
-                      <span className="font-semibold text-gray-900">{formatPrice(p.amount)}</span>
-                    </div>
-                  ))}
+                <span className="admin-label">Pagos recibidos</span>
+                <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--a-line)' }}>
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Método</th>
+                        <th>Referencia</th>
+                        <th className="r">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewing.payments.map((p) => (
+                        <tr key={p.id}>
+                          <td className="nowrap admin-num">{formatShortDate(p.receivedAt)}</td>
+                          <td className="capitalize">{p.method}</td>
+                          <td>{p.reference || <span className="muted">—</span>}</td>
+                          <td className="r admin-num nowrap"><b>{formatPrice(p.amount)}</b></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
 
             {viewing.status === 'anulada' && viewing.voidReason && (
-              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                Anulada: {viewing.voidReason}
-              </p>
+              <div className="rounded-lg px-3 py-2 text-sm" style={{ borderLeft: '4px solid var(--a-bad)', background: 'var(--a-bad-soft)' }}>
+                <b style={{ color: 'var(--a-bad)' }}>Anulada:</b> {viewing.voidReason}
+              </div>
             )}
 
             {/* Acciones */}
             {viewing.status === 'borrador' && (
-              <div className="flex gap-2">
-                <button onClick={() => handleEmit(viewing)} disabled={actionLoading} className="btn-primary flex-1 justify-center text-sm py-2 disabled:opacity-60">
-                  Emitir factura
+              <div className="flex flex-wrap justify-end gap-2 pt-1">
+                <button type="button" onClick={() => handleDelete(viewing)} className="admin-btn" data-variant="danger">
+                  <Trash2 className="h-4 w-4" />Eliminar
                 </button>
-                <button onClick={() => handleDelete(viewing)} className="flex-1 justify-center text-sm py-2 rounded-full border border-red-200 text-red-600 hover:bg-red-50 font-semibold inline-flex items-center gap-2">
-                  Eliminar
+                <button type="button" onClick={() => handleEmit(viewing)} disabled={actionLoading} className="admin-btn" data-variant="primary">
+                  <Send className="h-4 w-4" />{actionLoading ? 'Emitiendo…' : 'Emitir factura'}
                 </button>
               </div>
             )}
 
-            {['emitida', 'pagada_parcial'].includes(viewing.status) && !showPaymentForm && (
-              <button onClick={() => setShowPaymentForm(true)} className="btn-primary w-full justify-center text-sm py-2">
-                Registrar pago
-              </button>
+            {(['emitida', 'pagada_parcial'].includes(viewing.status) || (hasFullAccess(role) && !['borrador', 'anulada'].includes(viewing.status))) && !showPaymentForm && !showVoidForm && (
+              <div className="flex flex-wrap justify-end gap-2 pt-1">
+                {hasFullAccess(role) && !['borrador', 'anulada'].includes(viewing.status) && (
+                  <button type="button" onClick={() => setShowVoidForm(true)} className="admin-btn" data-variant="danger">
+                    <Ban className="h-4 w-4" />Anular factura
+                  </button>
+                )}
+                {['emitida', 'pagada_parcial'].includes(viewing.status) && (
+                  <button type="button" onClick={() => setShowPaymentForm(true)} className="admin-btn" data-variant="primary">
+                    <Wallet className="h-4 w-4" />Registrar pago
+                  </button>
+                )}
+              </div>
             )}
 
             {showPaymentForm && (
-              <form onSubmit={handlePayment} className="space-y-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                <div className="grid grid-cols-2 gap-2">
-                  <input required type="number" step="0.01" min="0.01" placeholder="Monto"
-                    value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                    className="px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-                  <select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })}
-                    className="px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 appearance-none capitalize">
-                    {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
+              <form onSubmit={handlePayment} className="flex flex-col gap-3 rounded-lg p-3.5" style={{ background: 'var(--a-surface-2)', border: '1px solid var(--a-line)' }}>
+                <span className="text-sm font-semibold">Registrar pago</span>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Monto">
+                    <input required type="number" step="0.01" min="0.01" placeholder={viewingBalance.toFixed(2)}
+                      value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                      className="admin-input admin-num" />
+                  </Field>
+                  <Field label="Método">
+                    <select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} className="admin-input capitalize">
+                      {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </Field>
                 </div>
-                <input placeholder="Referencia (opcional)" value={paymentForm.reference}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-                <div className="flex gap-2">
-                  <button type="submit" disabled={actionLoading} className="btn-primary flex-1 justify-center text-sm py-2 disabled:opacity-60">
-                    Guardar pago
-                  </button>
-                  <button type="button" onClick={() => setShowPaymentForm(false)} className="px-4 text-sm text-gray-500 hover:text-gray-900">
-                    Cancelar
+                <Field label="Referencia (opcional)">
+                  <input placeholder="N° de transferencia, recibo…" value={paymentForm.reference}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
+                    className="admin-input" />
+                </Field>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setShowPaymentForm(false)} className="admin-btn">Cancelar</button>
+                  <button type="submit" disabled={actionLoading} className="admin-btn" data-variant="primary">
+                    {actionLoading ? 'Guardando…' : 'Guardar pago'}
                   </button>
                 </div>
               </form>
             )}
 
-            {hasFullAccess(role) && !['borrador', 'anulada'].includes(viewing.status) && !showVoidForm && (
-              <button onClick={() => setShowVoidForm(true)} className="w-full justify-center text-sm py-2 rounded-full border border-red-200 text-red-600 hover:bg-red-50 font-semibold inline-flex items-center gap-2">
-                Anular factura
-              </button>
-            )}
-
             {showVoidForm && (
-              <form onSubmit={handleVoid} className="space-y-2 p-3 rounded-lg bg-red-50 border border-red-200">
-                <textarea required rows={2} placeholder="Motivo de anulación (obligatorio)"
-                  value={voidReason} onChange={(e) => setVoidReason(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-red-200 text-sm text-gray-900 focus:outline-none focus:border-red-400 resize-none" />
-                <div className="flex gap-2">
-                  <button type="submit" disabled={actionLoading} className="flex-1 justify-center text-sm py-2 rounded-full bg-red-600 hover:bg-red-700 text-white font-semibold inline-flex items-center gap-2 disabled:opacity-60">
-                    Confirmar anulación
-                  </button>
-                  <button type="button" onClick={() => setShowVoidForm(false)} className="px-4 text-sm text-gray-500 hover:text-gray-900">
-                    Cancelar
+              <form onSubmit={handleVoid} className="flex flex-col gap-3 rounded-lg p-3.5" style={{ borderLeft: '4px solid var(--a-bad)', background: 'var(--a-bad-soft)' }}>
+                <span className="text-sm font-semibold" style={{ color: 'var(--a-bad)' }}>Anular factura</span>
+                <Field label="Motivo de anulación (obligatorio)">
+                  <textarea required rows={2} placeholder="Explica por qué se anula esta factura"
+                    value={voidReason} onChange={(e) => setVoidReason(e.target.value)}
+                    className="admin-input" />
+                </Field>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setShowVoidForm(false)} className="admin-btn">Cancelar</button>
+                  <button type="submit" disabled={actionLoading} className="admin-btn" data-variant="danger">
+                    {actionLoading ? 'Anulando…' : 'Confirmar anulación'}
                   </button>
                 </div>
               </form>
