@@ -14,6 +14,12 @@ import InvoicesPanel from '@/components/admin/InvoicesPanel';
 import ReceivablesPanel from '@/components/admin/ReceivablesPanel';
 import CompanySettingsPanel from '@/components/admin/CompanySettingsPanel';
 import AppearancePanel from '@/components/admin/AppearancePanel';
+import SalesBoardPanel from '@/components/admin/SalesBoardPanel';
+import CalendarPanel from '@/components/admin/CalendarPanel';
+import VouchersPanel from '@/components/admin/VouchersPanel';
+import ReportsPanel from '@/components/admin/ReportsPanel';
+import DgiiPanel from '@/components/admin/DgiiPanel';
+import UsersPanel from '@/components/admin/UsersPanel';
 import { PageHeader } from '@/components/admin/ui';
 import DonutChart from '@/components/admin/charts/DonutChart';
 import Sparkline from '@/components/admin/charts/Sparkline';
@@ -418,6 +424,7 @@ function Settings({ me }: { me: AdminIdentity | null }) {
       <PageHeader title="Configuración" subtitle="Empresa, apariencia y seguridad." />
       <AppearancePanel />
       {hasFullAccess(me?.role) && <CompanySettingsPanel />}
+      {hasFullAccess(me?.role) && <UsersPanel />}
     </div>
   );
 }
@@ -444,6 +451,11 @@ export default function AdminPage() {
       {tab === 'invoices' && <InvoicesPanel />}
       {tab === 'receivables' && <ReceivablesPanel />}
       {tab === 'settings' && <Settings me={me} />}
+      {tab === 'sales' && <SalesBoardPanel />}
+      {tab === 'calendar' && <CalendarPanel />}
+      {tab === 'vouchers' && <VouchersPanel />}
+      {tab === 'reports' && <ReportsPanel />}
+      {tab === 'dgii' && <DgiiPanel />}
     </main>
   );
 }

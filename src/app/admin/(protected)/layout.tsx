@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Home, CalendarCheck, Plane, FileText, Receipt, Landmark,
-  Users, Package, Settings, LogOut, Menu, Search, Plus, type LucideIcon,
+  Users, Package, Settings, LogOut, Menu, Search, Plus, KanbanSquare, CalendarDays, Ticket, BarChart3, Building2, type LucideIcon,
 } from 'lucide-react';
 import { AdminTabProvider, useAdminTab } from '@/components/admin/AdminTabContext';
 import { AdminThemeProvider, useAdminTheme } from '@/components/admin/AdminThemeContext';
@@ -31,16 +31,19 @@ const NAV: { section: string; items: NavItem[] }[] = [
     section: 'Día a día',
     items: [
       { id: 'dashboard', label: 'Inicio', icon: Home },
+      { id: 'sales', label: 'Ventas', icon: KanbanSquare },
+      { id: 'calendar', label: 'Calendario', icon: CalendarDays },
       { id: 'bookings', label: 'Reservas', icon: CalendarCheck },
       { id: 'packages', label: 'Destinos y paquetes', icon: Plane },
     ],
   },
   {
-    section: 'Ventas',
+    section: 'Dinero',
     items: [
       { id: 'quotes', label: 'Cotizaciones', icon: FileText },
       { id: 'invoices', label: 'Facturas', icon: Receipt },
       { id: 'receivables', label: 'Cobros', icon: Landmark, fullAccessOnly: true },
+      { id: 'vouchers', label: 'Vouchers', icon: Ticket },
     ],
   },
   {
@@ -52,7 +55,11 @@ const NAV: { section: string; items: NavItem[] }[] = [
   },
   {
     section: 'Control',
-    items: [{ id: 'settings', label: 'Configuración', icon: Settings }],
+    items: [
+      { id: 'reports', label: 'Reportes', icon: BarChart3, fullAccessOnly: true },
+      { id: 'dgii', label: 'Impuestos DGII', icon: Building2, fullAccessOnly: true },
+      { id: 'settings', label: 'Configuración', icon: Settings },
+    ],
   },
 ];
 
