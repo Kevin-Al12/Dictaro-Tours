@@ -162,7 +162,17 @@ export async function GET(req: NextRequest) {
         daysLate: Math.floor((now.getTime() - (inv.dueDate as Date).getTime()) / DAY_MS),
       }));
 
+    // Ganancia del mes: precio al cliente menos costo del proveedor de cada línea facturada.
+    const monthItems = await prisma.invoiceItem.findMany({
+      where: { invoice: { status: { in: BILLED_STATUSES }, issueDate: { gte: monthStart } } },
+      select: { unitPrice: true, unitCost: true, quantity: true },
+    });
+    const monthCost = monthItems.reduce((sum, it) => sum + it.unitCost * it.quantity, 0);
+    const monthSold = monthItems.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
+
     finance = {
+      profitThisMonth: Math.round((monthSold - monthCost) * 100) / 100,
+      marginThisMonth: monthSold > 0 ? Math.round(((monthSold - monthCost) / monthSold) * 100) : 0,
       invoicedThisMonth: monthAgg._sum.total || 0,
       invoicedLastMonth: prevMonthAgg._sum.total || 0,
       receivableTotal: openInvoices.reduce((sum, inv) => sum + (inv.total - inv.amountPaid), 0),
@@ -171,7 +181,26 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  // Pasaportes que vencen en los próximos 6 meses de clientes con un viaje por delante.
+  const passportLimit = new Date(now.getTime() + 180 * DAY_MS);
+  const passportClients = await prisma.client.findMany({
+    where: {
+      passportExpiry: { not: null, lte: passportLimit },
+      bookings: { some: { date: { gte: todayKey }, status: { not: 'cancelada' } } },
+    },
+    include: { bookings: { where: { date: { gte: todayKey }, status: { not: 'cancelada' } }, orderBy: { date: 'asc' }, take: 1 } },
+    take: 5,
+  });
+  const passportAlerts = passportClients.map((c) => ({
+    id: c.id,
+    name: c.name,
+    passportExpiry: c.passportExpiry,
+    tripLabel: c.bookings[0]?.itemLabel ?? '',
+    tripDate: c.bookings[0]?.date ?? null,
+  }));
+
   return NextResponse.json({
+    passportAlerts,
     clientCount,
     quoteCount,
     bookingCount,

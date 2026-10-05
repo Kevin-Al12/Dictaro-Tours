@@ -15,12 +15,18 @@ interface Product {
   code: string;
   description: string;
   price: number;
+  cost: number;
   category: string;
 }
 
 const CATEGORIES = ['Hotel', 'Vuelo', 'Excursión', 'Migratorio', 'Paquete', 'Otro'];
 
-const emptyForm = { code: '', description: '', price: '', category: CATEGORIES[0] };
+const emptyForm = { code: '', description: '', price: '', cost: '', category: CATEGORIES[0] };
+
+// Margen sobre el precio de venta, en porcentaje entero.
+function marginOf(p: { price: number; cost: number }) {
+  return p.price > 0 ? Math.round(((p.price - (p.cost || 0)) / p.price) * 100) : null;
+}
 
 export default function ProductsPanel() {
   const { data: products, loading, reload } = useAdminList<Product>('/api/admin/products', 'products');
@@ -56,7 +62,7 @@ export default function ProductsPanel() {
 
   function openEdit(p: Product) {
     setEditing(p);
-    setForm({ code: p.code, description: p.description, price: String(p.price), category: p.category });
+    setForm({ code: p.code, description: p.description, price: String(p.price), cost: p.cost ? String(p.cost) : '', category: p.category });
     setModalOpen(true);
   }
 
@@ -124,7 +130,9 @@ export default function ProductsPanel() {
               <th>Código</th>
               <th>Descripción</th>
               <th>Categoría</th>
+              <th className="r">Costo</th>
               <th className="r">Precio</th>
+              <th className="r">Margen</th>
               <th className="r"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
@@ -134,7 +142,14 @@ export default function ProductsPanel() {
                 <td className="nowrap muted font-mono text-xs">{p.code}</td>
                 <td className="font-medium">{p.description}</td>
                 <td className="nowrap"><Pill tone="mute">{p.category}</Pill></td>
+                <td className="r nowrap admin-num muted">{p.cost ? formatPrice(p.cost) : '—'}</td>
                 <td className="r nowrap admin-num font-semibold">{formatPrice(p.price)}</td>
+                <td className="r nowrap">
+                  {(() => {
+                    const m = marginOf(p);
+                    return m === null ? <span className="muted">—</span> : <Pill tone={m >= 20 ? 'ok' : 'warn'}>{m}%</Pill>;
+                  })()}
+                </td>
                 <td className="r">
                   <div className="flex items-center justify-end gap-1">
                     <IconButton icon={Edit3} label="Editar" onClick={() => openEdit(p)} />
@@ -167,9 +182,22 @@ export default function ProductsPanel() {
           <Field label="Descripción">
             <input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Habitación doble Hard Rock" className="admin-input" />
           </Field>
-          <Field label="Precio (DOP)">
-            <input required type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="0.00" className="admin-input admin-num" />
-          </Field>
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <Field label="Costo del proveedor">
+              <input type="number" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} placeholder="0.00" className="admin-input admin-num" />
+            </Field>
+            <Field label="Precio (DOP)">
+              <input required type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="0.00" className="admin-input admin-num" />
+            </Field>
+          </div>
+          {(() => {
+            const m = marginOf({ price: parseFloat(form.price) || 0, cost: parseFloat(form.cost) || 0 });
+            return m === null ? null : (
+              <p className="-mt-1 text-xs" style={{ color: m >= 20 ? 'var(--a-ok)' : 'var(--a-warn)' }}>
+                Ganancia {formatPrice((parseFloat(form.price) || 0) - (parseFloat(form.cost) || 0))} por unidad · margen {m}%
+              </p>
+            );
+          })()}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" className="admin-btn" onClick={() => setModalOpen(false)}>Cancelar</button>
             <button type="submit" disabled={saving} className="admin-btn" data-variant="primary">

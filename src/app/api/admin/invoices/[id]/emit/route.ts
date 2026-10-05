@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAdminSession } from '@/lib/adminRoles';
 import { isUniqueConstraintError } from '@/lib/prismaErrors';
+import { logAudit } from '@/lib/audit';
+import { formatPrice } from '@/lib/utils';
 
 class InvoiceEmitError extends Error {
   constructor(public code: 'NOT_FOUND' | 'INVALID_STATUS') {
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const invoice = await emitWithNextNumber(params.id);
+      await logAudit(req, 'factura.emitida', `emitió la factura FAC-${String(invoice.number).padStart(4, '0')} a ${invoice.client.name} por ${formatPrice(invoice.total)}`);
       return NextResponse.json({ invoice });
     } catch (err) {
       if (err instanceof InvoiceEmitError) {

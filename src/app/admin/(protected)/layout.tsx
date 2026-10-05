@@ -79,14 +79,14 @@ function initials(name: string) {
     .join('');
 }
 
-function Sidebar({ me, open, onLogout }: { me: AdminIdentity | null; open: boolean; onLogout: () => void }) {
+function Sidebar({ me, open, onLogout, onNavigate }: { me: AdminIdentity | null; open: boolean; onLogout: () => void; onNavigate: () => void }) {
   const { tab, setTab } = useAdminTab();
   const fullAccess = hasFullAccess(me?.role);
 
   return (
     <aside
       aria-label="Menú principal"
-      className={`admin-sidebar fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col gap-5 overflow-y-auto px-3 py-[18px] transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:w-[232px] lg:translate-x-0 ${
+      className={`admin-sidebar print:hidden fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col gap-5 overflow-y-auto px-3 py-[18px] transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:w-[232px] lg:translate-x-0 ${
         open ? 'translate-x-0 shadow-[0_0_0_100vmax_rgba(0,0,0,.4)] lg:shadow-none' : '-translate-x-full'
       }`}
       style={{ background: 'var(--a-navy)', color: 'var(--a-navy-fg)' }}
@@ -116,7 +116,7 @@ function Sidebar({ me, open, onLogout }: { me: AdminIdentity | null; open: boole
                   <button
                     key={id}
                     type="button"
-                    onClick={() => setTab(id)}
+                    onClick={() => { setTab(id); onNavigate(); }}
                     aria-current={active ? 'page' : undefined}
                     className={`flex items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-white/[.06] ${
                       active ? 'bg-white/[.11] font-semibold opacity-100' : 'opacity-[.82] hover:opacity-100'
@@ -160,7 +160,7 @@ function Topbar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void
   const { setTab } = useAdminTab();
   return (
     <header
-      className="sticky top-0 z-30 flex items-center gap-3 px-4 py-2.5 sm:px-7 sm:py-3.5"
+      className="sticky top-0 z-30 flex items-center gap-3 print:hidden px-4 py-2.5 sm:px-7 sm:py-3.5"
       style={{ background: 'var(--a-surface)', borderBottom: '1px solid var(--a-line)' }}
     >
       <button
@@ -250,7 +250,7 @@ function AdminChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="admin-shell min-h-screen lg:flex" data-admin-theme={theme}>
-      <Sidebar me={me} open={menuOpen} onLogout={handleLogout} />
+      <Sidebar me={me} open={menuOpen} onLogout={handleLogout} onNavigate={() => setMenuOpen(false)} />
       {menuOpen && (
         <button
           type="button"

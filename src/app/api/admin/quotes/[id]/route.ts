@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { logAudit } from '@/lib/audit';
+import { formatPrice } from '@/lib/utils';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const quote = await prisma.quote.findUnique({
@@ -24,6 +26,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       data: { status },
       include: { client: true, items: true },
     });
+    if (status === 'aceptada') {
+      await logAudit(req, 'cotizacion.aceptada', `marcó como aceptada la cotización COT-${String(quote.number).padStart(4, '0')} de ${quote.client.name} por ${formatPrice(quote.total)}`);
+    }
     return NextResponse.json({ quote });
   } catch {
     return NextResponse.json({ error: 'No se pudo actualizar la cotización' }, { status: 400 });

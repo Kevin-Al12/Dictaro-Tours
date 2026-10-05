@@ -230,15 +230,15 @@ async function cargar() {
 
   // ── Bitácora ──
   const LOG = [
-    [0, 'Mariela Santos', 'pago.registrado', 'Registró un pago de RD$76,400 (cheque) a Grupo Colegio San Judas'],
-    [0, 'Ramón Castillo', 'cotizacion.creada', 'Creó una cotización para Pedro Gil · Punta Cana todo incluido'],
-    [1, owner?.name ?? 'Administradora', 'factura.emitida', 'Emitió la factura de la Familia Núñez · Excursión Isla Saona'],
-    [2, 'Ramón Castillo', 'voucher.enviado', 'Envió el voucher del Hyatt Ziva Cancún a Luisa Fernández'],
-    [4, owner?.name ?? 'Administradora', 'factura.emitida', 'Emitió la factura de Luisa Fernández · Cancún'],
-    [9, 'Mariela Santos', 'pago.registrado', 'Registró un pago de RD$60,750 (transferencia) a Carolina Méndez'],
-    [10, 'Mariela Santos', 'pago.registrado', 'Registró un pago de RD$58,500 (transferencia) a la Familia Pérez Rosario'],
-    [18, 'Ramón Castillo', 'cotizacion.aceptada', 'La Familia Pérez Rosario aceptó su cotización · Barceló Bávaro'],
-    [30, owner?.name ?? 'Administradora', 'factura.anulada', 'Anuló la factura de Héctor Santana · el cliente canceló el viaje'],
+    [0, 'Mariela Santos', 'pago.registrado', 'registró un pago de RD$76,400 (cheque) a Grupo Colegio San Judas'],
+    [0, 'Ramón Castillo', 'cotizacion.creada', 'creó una cotización para Pedro Gil · Punta Cana todo incluido'],
+    [1, owner?.name ?? 'Srta. Alcántara', 'factura.emitida', 'emitió la factura de la Familia Núñez · Excursión Isla Saona'],
+    [2, 'Ramón Castillo', 'voucher.enviado', 'envió el voucher del Hyatt Ziva Cancún a Luisa Fernández'],
+    [4, owner?.name ?? 'Srta. Alcántara', 'factura.emitida', 'emitió la factura de Luisa Fernández · Cancún'],
+    [9, 'Mariela Santos', 'pago.registrado', 'registró un pago de RD$60,750 (transferencia) a Carolina Méndez'],
+    [10, 'Mariela Santos', 'pago.registrado', 'registró un pago de RD$58,500 (transferencia) a la Familia Pérez Rosario'],
+    [18, 'Ramón Castillo', 'cotizacion.aceptada', 'marcó como aceptada la cotización de la Familia Pérez Rosario · Barceló Bávaro'],
+    [30, owner?.name ?? 'Srta. Alcántara', 'factura.anulada', 'anuló la factura de Héctor Santana · el cliente canceló el viaje'],
   ];
   for (const [i, [ago, actorName, action, detail]] of LOG.entries()) {
     await prisma.auditLog.create({ data: { id: `demo-l${String(i).padStart(2, '0')}`, createdAt: daysFromNow(-ago, 9 + (i % 8)), actorName, action, detail } });

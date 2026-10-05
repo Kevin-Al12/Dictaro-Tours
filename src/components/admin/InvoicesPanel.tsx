@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Receipt, Eye, PlusCircle, AlertTriangle, Search, Send, Wallet, Ban } from 'lucide-react';
+import { Plus, Trash2, Receipt, Eye, PlusCircle, AlertTriangle, Search, Send, Wallet, Ban, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatPrice, formatDate, formatShortDate } from '@/lib/utils';
+import { formatPrice, formatShortDate } from '@/lib/utils';
 import { useAdminList } from '@/hooks/useAdminList';
 import { deleteAdminItem } from '@/lib/adminActions';
 import { hasFullAccess } from '@/lib/adminRoleConstants';
 import AdminModal from './AdminModal';
 import AdminTableShell from './AdminTableShell';
-import { PageHeader, Who, Pill, IconButton, Field, FilterChips, DetailRow, type Tone } from './ui';
+import { PageHeader, Who, Pill, IconButton, Field, FilterChips, type Tone } from './ui';
+import InvoiceDocument, { type InvoiceDocumentData, type CompanyInfo } from './InvoiceDocument';
 
 interface Client {
   id: string;
@@ -44,6 +45,10 @@ interface Invoice {
   id: string;
   number: number | null;
   status: string;
+  ncfType?: string | null;
+  ncfNumber?: string | null;
+  quote?: InvoiceDocumentData['quote'];
+  createdBy?: InvoiceDocumentData['createdBy'];
   issueDate: string;
   dueDate: string | null;
   subtotal: number;
@@ -113,6 +118,23 @@ export default function InvoicesPanel() {
   const [actionLoading, setActionLoading] = useState(false);
   const [filter, setFilter] = useState<Filter>('todas');
   const [query, setQuery] = useState('');
+  const [company, setCompany] = useState<CompanyInfo | null>(null);
+
+  useEffect(() => {
+    // Datos de la empresa para el encabezado de la factura (un vendedor recibe 403: se usa el nombre por defecto).
+    fetch('/api/admin/company-settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setCompany(data?.settings ?? null))
+      .catch(() => setCompany(null));
+  }, []);
+
+  // Detalle completo (cotización, reserva, quién la creó) para el documento y su historial.
+  async function loadDetail(id: string) {
+    const res = await fetch(`/api/admin/invoices/${id}`).catch(() => null);
+    if (!res || !res.ok) return;
+    const data = await res.json();
+    setViewing((current) => (current && current.id === id ? data.invoice : current));
+  }
 
   useEffect(() => {
     fetch('/api/admin/me')
@@ -135,6 +157,7 @@ export default function InvoicesPanel() {
     setShowVoidForm(false);
     setPaymentForm({ amount: '', method: PAYMENT_METHODS[0], reference: '', notes: '' });
     setVoidReason('');
+    loadDetail(inv.id);
   }
 
   function updateItem(index: number, patch: Partial<DraftItem>) {
@@ -211,6 +234,7 @@ export default function InvoicesPanel() {
     const data = await res.json();
     toast.success('Factura emitida');
     setViewing(data.invoice);
+    loadDetail(data.invoice.id);
     reload();
   }
 
@@ -240,6 +264,7 @@ export default function InvoicesPanel() {
     const data = await res.json();
     toast.success('Pago registrado');
     setViewing(data.invoice);
+    loadDetail(data.invoice.id);
     setShowPaymentForm(false);
     setPaymentForm({ amount: '', method: PAYMENT_METHODS[0], reference: '', notes: '' });
     reload();
@@ -264,7 +289,9 @@ export default function InvoicesPanel() {
       return;
     }
     toast.success('Factura anulada');
-    setViewing(null);
+    setShowVoidForm(false);
+    setVoidReason('');
+    loadDetail(viewing.id);
     reload();
   }
 
@@ -285,6 +312,89 @@ export default function InvoicesPanel() {
   const porCobrar = (counts.emitida ?? 0) + (counts.pagada_parcial ?? 0);
   const emitidas = invoices.filter((inv) => inv.number).length;
   const viewingBalance = viewing ? Math.max(viewing.total - viewing.amountPaid, 0) : 0;
+
+  if (viewing) {
+    const canVoid = hasFullAccess(role) && !['borrador', 'anulada'].includes(viewing.status);
+    const canPay = ['emitida', 'pagada_parcial'].includes(viewing.status);
+    const formsOpen = showPaymentForm || showVoidForm;
+    const actions = (
+      <>
+        <button type="button" onClick={() => window.print()} className="admin-btn">
+          <Printer className="h-4 w-4" />Imprimir
+        </button>
+        {viewing.status === 'borrador' && (
+          <>
+            <button type="button" onClick={() => handleDelete(viewing)} className="admin-btn" data-variant="danger">
+              <Trash2 className="h-4 w-4" />Eliminar
+            </button>
+            <button type="button" onClick={() => handleEmit(viewing)} disabled={actionLoading} className="admin-btn" data-variant="primary">
+              <Send className="h-4 w-4" />{actionLoading ? 'Emitiendo…' : 'Emitir factura'}
+            </button>
+          </>
+        )}
+        {canVoid && !formsOpen && (
+          <button type="button" onClick={() => setShowVoidForm(true)} className="admin-btn" data-variant="danger">
+            <Ban className="h-4 w-4" />Anular factura
+          </button>
+        )}
+        {canPay && !formsOpen && (
+          <button type="button" onClick={() => setShowPaymentForm(true)} className="admin-btn" data-variant="primary">
+            <Wallet className="h-4 w-4" />Registrar pago
+          </button>
+        )}
+      </>
+    );
+
+    return (
+      <InvoiceDocument invoice={viewing} company={company} actions={actions} onBack={() => setViewing(null)}>
+        {showPaymentForm && (
+          <form onSubmit={handlePayment} className="admin-card flex flex-col gap-3 p-4 print:hidden">
+            <span className="text-sm font-semibold">Registrar pago · saldo {formatPrice(viewingBalance)}</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Monto">
+                <input required type="number" step="0.01" min="0.01" placeholder={viewingBalance.toFixed(2)}
+                  value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                  className="admin-input admin-num" />
+              </Field>
+              <Field label="Método">
+                <select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} className="admin-input capitalize">
+                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </Field>
+              <Field label="Referencia (opcional)">
+                <input placeholder="N° de transferencia, recibo…" value={paymentForm.reference}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
+                  className="admin-input" />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowPaymentForm(false)} className="admin-btn">Cancelar</button>
+              <button type="submit" disabled={actionLoading} className="admin-btn" data-variant="primary">
+                {actionLoading ? 'Guardando…' : 'Guardar pago'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {showVoidForm && (
+          <form onSubmit={handleVoid} className="admin-card flex flex-col gap-3 p-4 print:hidden" style={{ borderLeft: '4px solid var(--a-bad)', background: 'var(--a-bad-soft)' }}>
+            <span className="text-sm font-semibold" style={{ color: 'var(--a-bad)' }}>Anular factura</span>
+            <Field label="Motivo de anulación (obligatorio)">
+              <textarea required rows={2} placeholder="Explica por qué se anula esta factura"
+                value={voidReason} onChange={(e) => setVoidReason(e.target.value)}
+                className="admin-input" />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowVoidForm(false)} className="admin-btn">Cancelar</button>
+              <button type="submit" disabled={actionLoading} className="admin-btn" data-variant="danger">
+                {actionLoading ? 'Anulando…' : 'Confirmar anulación'}
+              </button>
+            </div>
+          </form>
+        )}
+      </InvoiceDocument>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -449,181 +559,6 @@ export default function InvoicesPanel() {
         </form>
       </AdminModal>
 
-      {/* Detalle de factura */}
-      <AdminModal
-        open={Boolean(viewing)}
-        onClose={() => setViewing(null)}
-        title={viewing ? (
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="admin-num">{invoiceCode(viewing)}</span>
-            <Pill tone={STATUS_TONE[viewing.status] ?? 'mute'}>{STATUS_LABEL[viewing.status] ?? viewing.status}</Pill>
-          </span>
-        ) : ''}
-        subtitle={viewing ? `${viewing.client.name} · ${formatDate(viewing.issueDate)}` : undefined}
-        maxWidth="max-w-xl"
-      >
-        {viewing && (
-          <div className="flex flex-col gap-4">
-            <div>
-              <DetailRow label="Cliente">{viewing.client.name}</DetailRow>
-              <DetailRow label="Fecha de emisión">{formatDate(viewing.issueDate)}</DetailRow>
-              {viewing.dueDate && <DetailRow label="Vencimiento">{formatDate(viewing.dueDate)}</DetailRow>}
-              <DetailRow label="Estado"><Pill tone={STATUS_TONE[viewing.status] ?? 'mute'}>{STATUS_LABEL[viewing.status] ?? viewing.status}</Pill></DetailRow>
-            </div>
-
-            <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--a-line)' }}>
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Descripción</th>
-                    <th className="r">Cant.</th>
-                    <th className="r">Precio</th>
-                    <th className="r">Importe</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {viewing.items.map((it) => (
-                    <tr key={it.id}>
-                      <td>{it.description}</td>
-                      <td className="r admin-num">{it.quantity}</td>
-                      <td className="r admin-num nowrap">{formatPrice(it.unitPrice)}</td>
-                      <td className="r admin-num nowrap"><b>{formatPrice(it.unitPrice * it.quantity)}</b></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="ml-auto flex w-full flex-col gap-1 text-sm sm:w-72">
-              <div className="flex justify-between" style={{ color: 'var(--a-muted)' }}>
-                <span>Subtotal</span><span className="admin-num">{formatPrice(viewing.subtotal)}</span>
-              </div>
-              <div className="flex justify-between" style={{ color: 'var(--a-muted)' }}>
-                <span>ITBIS</span><span className="admin-num">{formatPrice(viewing.itbis)}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between pt-2" style={{ borderTop: '1px solid var(--a-line)' }}>
-                <span className="font-semibold">Total</span>
-                <span className="admin-display admin-num text-xl font-bold">{formatPrice(viewing.total)}</span>
-              </div>
-              <div className="flex justify-between" style={{ color: 'var(--a-ok)' }}>
-                <span>Pagado</span><span className="admin-num">{formatPrice(viewing.amountPaid)}</span>
-              </div>
-              <div className="flex justify-between font-semibold" style={{ color: viewingBalance > 0 ? 'var(--a-bad)' : 'var(--a-fg)' }}>
-                <span>Saldo</span><span className="admin-num">{formatPrice(viewingBalance)}</span>
-              </div>
-            </div>
-
-            {viewing.notes && <p className="text-sm italic" style={{ color: 'var(--a-muted)' }}>&ldquo;{viewing.notes}&rdquo;</p>}
-
-            {viewing.payments.length > 0 && (
-              <div>
-                <span className="admin-label">Pagos recibidos</span>
-                <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--a-line)' }}>
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Método</th>
-                        <th>Referencia</th>
-                        <th className="r">Monto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {viewing.payments.map((p) => (
-                        <tr key={p.id}>
-                          <td className="nowrap admin-num">{formatShortDate(p.receivedAt)}</td>
-                          <td className="capitalize">{p.method}</td>
-                          <td>{p.reference || <span className="muted">—</span>}</td>
-                          <td className="r admin-num nowrap"><b>{formatPrice(p.amount)}</b></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {viewing.status === 'anulada' && viewing.voidReason && (
-              <div className="rounded-lg px-3 py-2 text-sm" style={{ borderLeft: '4px solid var(--a-bad)', background: 'var(--a-bad-soft)' }}>
-                <b style={{ color: 'var(--a-bad)' }}>Anulada:</b> {viewing.voidReason}
-              </div>
-            )}
-
-            {/* Acciones */}
-            {viewing.status === 'borrador' && (
-              <div className="flex flex-wrap justify-end gap-2 pt-1">
-                <button type="button" onClick={() => handleDelete(viewing)} className="admin-btn" data-variant="danger">
-                  <Trash2 className="h-4 w-4" />Eliminar
-                </button>
-                <button type="button" onClick={() => handleEmit(viewing)} disabled={actionLoading} className="admin-btn" data-variant="primary">
-                  <Send className="h-4 w-4" />{actionLoading ? 'Emitiendo…' : 'Emitir factura'}
-                </button>
-              </div>
-            )}
-
-            {(['emitida', 'pagada_parcial'].includes(viewing.status) || (hasFullAccess(role) && !['borrador', 'anulada'].includes(viewing.status))) && !showPaymentForm && !showVoidForm && (
-              <div className="flex flex-wrap justify-end gap-2 pt-1">
-                {hasFullAccess(role) && !['borrador', 'anulada'].includes(viewing.status) && (
-                  <button type="button" onClick={() => setShowVoidForm(true)} className="admin-btn" data-variant="danger">
-                    <Ban className="h-4 w-4" />Anular factura
-                  </button>
-                )}
-                {['emitida', 'pagada_parcial'].includes(viewing.status) && (
-                  <button type="button" onClick={() => setShowPaymentForm(true)} className="admin-btn" data-variant="primary">
-                    <Wallet className="h-4 w-4" />Registrar pago
-                  </button>
-                )}
-              </div>
-            )}
-
-            {showPaymentForm && (
-              <form onSubmit={handlePayment} className="flex flex-col gap-3 rounded-lg p-3.5" style={{ background: 'var(--a-surface-2)', border: '1px solid var(--a-line)' }}>
-                <span className="text-sm font-semibold">Registrar pago</span>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Monto">
-                    <input required type="number" step="0.01" min="0.01" placeholder={viewingBalance.toFixed(2)}
-                      value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                      className="admin-input admin-num" />
-                  </Field>
-                  <Field label="Método">
-                    <select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} className="admin-input capitalize">
-                      {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </Field>
-                </div>
-                <Field label="Referencia (opcional)">
-                  <input placeholder="N° de transferencia, recibo…" value={paymentForm.reference}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
-                    className="admin-input" />
-                </Field>
-                <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => setShowPaymentForm(false)} className="admin-btn">Cancelar</button>
-                  <button type="submit" disabled={actionLoading} className="admin-btn" data-variant="primary">
-                    {actionLoading ? 'Guardando…' : 'Guardar pago'}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {showVoidForm && (
-              <form onSubmit={handleVoid} className="flex flex-col gap-3 rounded-lg p-3.5" style={{ borderLeft: '4px solid var(--a-bad)', background: 'var(--a-bad-soft)' }}>
-                <span className="text-sm font-semibold" style={{ color: 'var(--a-bad)' }}>Anular factura</span>
-                <Field label="Motivo de anulación (obligatorio)">
-                  <textarea required rows={2} placeholder="Explica por qué se anula esta factura"
-                    value={voidReason} onChange={(e) => setVoidReason(e.target.value)}
-                    className="admin-input" />
-                </Field>
-                <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => setShowVoidForm(false)} className="admin-btn">Cancelar</button>
-                  <button type="submit" disabled={actionLoading} className="admin-btn" data-variant="danger">
-                    {actionLoading ? 'Anulando…' : 'Confirmar anulación'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        )}
-      </AdminModal>
     </div>
   );
 }

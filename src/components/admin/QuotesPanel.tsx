@@ -21,12 +21,14 @@ interface Product {
   code: string;
   description: string;
   price: number;
+  cost?: number;
 }
 
 interface QuoteItem {
   id: string;
   description: string;
   unitPrice: number;
+  unitCost?: number;
   quantity: number;
   subtotal: number;
 }
@@ -46,6 +48,7 @@ interface DraftItem {
   productId: string;
   description: string;
   unitPrice: string;
+  unitCost: number; // costo del proveedor, viene del producto elegido
   quantity: string;
 }
 
@@ -68,7 +71,19 @@ type Filter = 'todas' | keyof typeof STATUS_LABEL;
 
 const quoteCode = (n: number) => `COT-${String(n).padStart(4, '0')}`;
 
-const emptyItem = (): DraftItem => ({ productId: '', description: '', unitPrice: '', quantity: '1' });
+const emptyItem = (): DraftItem => ({ productId: '', description: '', unitPrice: '', unitCost: 0, quantity: '1' });
+
+// "Costo proveedores RD$X · Ganancia RD$Y · Margen Z%" debajo del total.
+function ProfitSummary({ total, cost }: { total: number; cost: number }) {
+  if (cost <= 0 || total <= 0) return null;
+  const profit = total - cost;
+  const margin = Math.round((profit / total) * 100);
+  return (
+    <p className="admin-num text-right text-xs font-semibold" style={{ color: profit >= 0 ? 'var(--a-ok)' : 'var(--a-bad)' }}>
+      Costo proveedores {formatPrice(cost)} · Ganancia {formatPrice(profit)} · Margen {margin}%
+    </p>
+  );
+}
 
 export default function QuotesPanel() {
   const { data: quotes, loading, reload } = useAdminList<Quote>('/api/admin/quotes', 'quotes');
@@ -123,6 +138,7 @@ export default function QuotesPanel() {
       productId,
       description: product?.description || '',
       unitPrice: product ? String(product.price) : items[index].unitPrice,
+      unitCost: product?.cost ?? 0,
     });
   }
 
@@ -135,6 +151,7 @@ export default function QuotesPanel() {
     const qty = parseInt(it.quantity, 10) || 0;
     return sum + price * qty;
   }, 0);
+  const draftCost = items.reduce((sum, it) => sum + (it.unitCost || 0) * (parseInt(it.quantity, 10) || 0), 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -159,6 +176,7 @@ export default function QuotesPanel() {
           productId: it.productId || undefined,
           description: it.description,
           unitPrice: it.unitPrice,
+          unitCost: it.unitCost || 0,
           quantity: it.quantity,
         })),
       }),
@@ -363,6 +381,7 @@ export default function QuotesPanel() {
             <span className="text-sm font-semibold" style={{ color: 'var(--a-muted)' }}>Total</span>
             <span className="admin-display admin-num text-xl font-bold">{formatPrice(draftTotal)}</span>
           </div>
+          <div className="-mt-2"><ProfitSummary total={draftTotal} cost={draftCost} /></div>
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button type="button" className="admin-btn" onClick={() => setModalOpen(false)}>Cancelar</button>
@@ -414,6 +433,9 @@ export default function QuotesPanel() {
             <div className="mt-3 flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--a-line)' }}>
               <span className="text-sm font-semibold" style={{ color: 'var(--a-muted)' }}>Total</span>
               <span className="admin-display admin-num text-xl font-bold">{formatPrice(viewing.total)}</span>
+            </div>
+            <div className="mt-1">
+              <ProfitSummary total={viewing.total} cost={viewing.items.reduce((s, it) => s + (it.unitCost || 0) * it.quantity, 0)} />
             </div>
 
             {viewing.status === 'aceptada' && (

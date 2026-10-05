@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAdminSession } from '@/lib/adminRoles';
+import { logAudit } from '@/lib/audit';
+import { formatPrice } from '@/lib/utils';
 
 const PAYABLE_STATUSES = ['emitida', 'pagada_parcial'];
 
@@ -48,5 +50,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }),
   ]);
 
+  await logAudit(req, 'pago.registrado', `registró un pago de ${formatPrice(parsedAmount)} de ${updatedInvoice.client.name}${invoice.number ? ` en FAC-${String(invoice.number).padStart(4, '0')}` : ''}`);
   return NextResponse.json({ payment, invoice: updatedInvoice }, { status: 201 });
 }

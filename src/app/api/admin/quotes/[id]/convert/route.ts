@@ -27,6 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return {
       description: it.description,
       unitPrice: it.unitPrice,
+      unitCost: it.unitCost,
       quantity: it.quantity,
       itbisRate,
       subtotal: amounts.subtotal,

@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Landmark } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Landmark, MessageCircle } from 'lucide-react';
 import { formatPrice, formatDate, formatShortDate } from '@/lib/utils';
 import AdminTableShell from './AdminTableShell';
+import AdminModal from './AdminModal';
 import { PageHeader, Who, Pill, type Tone } from './ui';
 
 interface Receivable {
@@ -26,6 +27,14 @@ interface ReceivablesData {
 }
 
 const DAY = 24 * 60 * 60 * 1000;
+
+const facCode = (n: number | null) => (n ? `FAC-${String(n).padStart(4, '0')}` : 'en borrador');
+
+// Número para wa.me: solo dígitos; los 10 dígitos locales llevan el 1 delante.
+function waNumber(phone: string | null | undefined) {
+  const digits = (phone || '').replace(/\D/g, '');
+  return digits.length === 10 ? `1${digits}` : digits;
+}
 
 // Días de atraso respecto al vencimiento (negativo = faltan días para vencer).
 function daysLate(dueDate: string | null): number | null {
@@ -60,6 +69,8 @@ export default function ReceivablesPanel() {
   const [data, setData] = useState<ReceivablesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [remindOpen, setRemindOpen] = useState(false);
+  const [phones, setPhones] = useState<Record<string, string | null> | null>(null);
 
   useEffect(() => {
     fetch('/api/admin/receivables')
@@ -82,10 +93,62 @@ export default function ReceivablesPanel() {
 
   const receivables = data?.receivables ?? [];
   const overdue = receivables.filter((r) => (daysLate(r.dueDate) ?? 0) > 0);
-  const overdueTotal = overdue.reduce((sum, r) => sum + r.balance, 0);
-  const totalDue = data?.summary.total ?? receivables.reduce((sum, r) => sum + r.balance, 0);
 
-  const header = <PageHeader title="Cobros" subtitle="Quién debe, cuánto y desde cuándo." />;
+  // Antigüedad según días vencidos: sin vencer (o sin fecha) cuenta como al día.
+  const aging = { current: 0, d30: 0, d60: 0, d61: 0 };
+  for (const r of receivables) {
+    const d = daysLate(r.dueDate) ?? 0;
+    if (d <= 0) aging.current += r.balance;
+    else if (d <= 30) aging.d30 += r.balance;
+    else if (d <= 60) aging.d60 += r.balance;
+    else aging.d61 += r.balance;
+  }
+
+  // Vencidos agrupados por cliente para el recordatorio.
+  const overdueByClient = useMemo(() => {
+    const map = new Map<string, { clientId: string; clientName: string; balance: number; invoices: Receivable[] }>();
+    for (const r of overdue) {
+      const entry = map.get(r.clientId) ?? { clientId: r.clientId, clientName: r.clientName, balance: 0, invoices: [] };
+      entry.balance += r.balance;
+      entry.invoices.push(r);
+      map.set(r.clientId, entry);
+    }
+    return Array.from(map.values()).sort((a, b) => b.balance - a.balance);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  useEffect(() => {
+    if (!remindOpen || phones) return;
+    fetch('/api/admin/clients')
+      .then((res) => (res.ok ? res.json() : { clients: [] }))
+      .then((json: { clients?: { id: string; phone: string | null }[] }) => {
+        setPhones(Object.fromEntries((json.clients ?? []).map((c) => [c.id, c.phone])));
+      })
+      .catch(() => setPhones({}));
+  }, [remindOpen, phones]);
+
+  function reminderText(c: { clientName: string; balance: number; invoices: Receivable[] }) {
+    const lines = c.invoices.map((r) => `• ${facCode(r.number)}: saldo ${formatPrice(r.balance)}${r.dueDate ? `, venció el ${formatShortDate(r.dueDate)}` : ''}`);
+    return [
+      `Hola ${c.clientName}, le saludamos de D'Itaros Tours.`,
+      'Le recordamos amablemente que tiene un saldo pendiente:',
+      ...lines,
+      `Total pendiente: ${formatPrice(c.balance)}.`,
+      'Si ya realizó el pago, por favor envíenos el comprobante. ¡Gracias!',
+    ].join('\n');
+  }
+
+  const header = (
+    <PageHeader
+      title="Cobros"
+      subtitle="Quién debe, cuánto y desde cuándo."
+      actions={!errorMessage && (
+        <button type="button" className="admin-btn" onClick={() => setRemindOpen(true)} disabled={loading}>
+          <MessageCircle className="h-4 w-4" />Recordar a todos los vencidos
+        </button>
+      )}
+    />
+  );
 
   if (errorMessage) {
     return (
@@ -105,10 +168,11 @@ export default function ReceivablesPanel() {
     <div className="flex flex-col gap-[18px]">
       {header}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Kpi label="Total por cobrar" value={loading ? '—' : formatPrice(totalDue)} />
-        <Kpi label="Vencido" value={loading ? '—' : formatPrice(overdueTotal)} color={overdueTotal > 0 ? 'var(--a-bad)' : undefined} />
-        <Kpi label="Facturas abiertas" value={loading ? '—' : receivables.length} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Al día" value={loading ? '—' : formatPrice(aging.current)} />
+        <Kpi label="1 a 30 días" value={loading ? '—' : formatPrice(aging.d30)} color="var(--a-warn)" />
+        <Kpi label="31 a 60 días" value={loading ? '—' : formatPrice(aging.d60)} color="var(--a-bad)" />
+        <Kpi label="Más de 60 días" value={loading ? '—' : formatPrice(aging.d61)} color={aging.d61 > 0 ? 'var(--a-bad)' : undefined} />
       </div>
 
       <AdminTableShell
@@ -150,6 +214,46 @@ export default function ReceivablesPanel() {
           </tbody>
         </table>
       </AdminTableShell>
+
+      <AdminModal
+        open={remindOpen}
+        onClose={() => setRemindOpen(false)}
+        title="Recordar a los vencidos"
+        subtitle={overdueByClient.length ? `${overdueByClient.length} ${overdueByClient.length === 1 ? 'cliente con saldo vencido' : 'clientes con saldo vencido'}` : undefined}
+        maxWidth="max-w-lg"
+      >
+        {overdueByClient.length === 0 ? (
+          <p className="py-6 text-center text-sm" style={{ color: 'var(--a-muted)' }}>Nadie tiene facturas vencidas. ¡Todo al día!</p>
+        ) : (
+          <ul className="flex flex-col">
+            {overdueByClient.map((c) => {
+              const phone = phones ? waNumber(phones[c.clientId]) : '';
+              return (
+                <li key={c.clientId} className="flex items-center gap-3 py-2.5 text-[13px]" style={{ borderBottom: '1px solid var(--a-line)' }}>
+                  <div className="min-w-0 flex-1">
+                    <Who name={c.clientName} detail={`${c.invoices.map((r) => facCode(r.number)).join(', ')} · ${formatPrice(c.balance)}`} />
+                  </div>
+                  {!phones ? (
+                    <span className="text-xs" style={{ color: 'var(--a-faint)' }}>Cargando…</span>
+                  ) : phone ? (
+                    <a
+                      className="admin-btn"
+                      data-size="sm"
+                      href={`https://wa.me/${phone}?text=${encodeURIComponent(reminderText(c))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" />WhatsApp
+                    </a>
+                  ) : (
+                    <span className="text-xs" style={{ color: 'var(--a-faint)' }}>Sin teléfono</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </AdminModal>
     </div>
   );
 }

@@ -9,7 +9,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { code, description, price, category } = body;
+  const { code, description, price, cost, category } = body;
 
   if (!code || !description || price === undefined || !category) {
     return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 });
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const product = await prisma.product.create({
-      data: { code, description, price: parseFloat(price), category },
+      data: { code, description, price: parseFloat(price), cost: parseFloat(cost) || 0, category },
     });
     return NextResponse.json({ product }, { status: 201 });
   } catch (err) {

@@ -6,10 +6,13 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatPrice(price: number, currency = 'DOP') {
+  // Montos redondos sin decimales; si hay centavos, siempre dos (RD$22,166.10, no RD$22,166.1).
+  const hasCents = Math.round(price * 100) % 100 !== 0;
   return new Intl.NumberFormat('es-DO', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 0,
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
   }).format(price);
 }
 
