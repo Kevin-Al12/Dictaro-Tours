@@ -9,7 +9,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, phone, email, document, notes } = body;
+  const { name, phone, email, document, notes, passportNumber, passportExpiry } = body;
 
   if (!name) {
     return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 });
@@ -19,7 +19,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const client = await prisma.client.create({
-      data: { name, phone: phone || null, email: normalizedEmail, document: document || null, notes: notes || null },
+      data: { name, phone: phone || null, email: normalizedEmail, document: document || null, notes: notes || null,
+        passportNumber: passportNumber?.trim() || null, passportExpiry: parseDate(passportExpiry),
+      },
     });
     return NextResponse.json({ client }, { status: 201 });
   } catch (err) {
@@ -28,4 +30,10 @@ export async function POST(req: NextRequest) {
     }
     throw err;
   }
+}
+
+function parseDate(value: unknown): Date | null {
+  if (!value || typeof value !== 'string') return null;
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }

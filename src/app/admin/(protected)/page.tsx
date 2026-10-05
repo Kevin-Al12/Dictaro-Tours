@@ -14,6 +14,13 @@ import InvoicesPanel from '@/components/admin/InvoicesPanel';
 import ReceivablesPanel from '@/components/admin/ReceivablesPanel';
 import CompanySettingsPanel from '@/components/admin/CompanySettingsPanel';
 import AppearancePanel from '@/components/admin/AppearancePanel';
+import SalesBoardPanel from '@/components/admin/SalesBoardPanel';
+import CalendarPanel from '@/components/admin/CalendarPanel';
+import VouchersPanel from '@/components/admin/VouchersPanel';
+import ReportsPanel from '@/components/admin/ReportsPanel';
+import DgiiPanel from '@/components/admin/DgiiPanel';
+import UsersPanel from '@/components/admin/UsersPanel';
+import { PageHeader } from '@/components/admin/ui';
 import DonutChart from '@/components/admin/charts/DonutChart';
 import Sparkline from '@/components/admin/charts/Sparkline';
 
@@ -49,7 +56,10 @@ interface DashboardData {
   upcomingBookings: { id: string; customerName: string; itemLabel: string; date: string; passengers: number; status: string }[];
   acceptedNotInvoiced: QuoteRef[];
   staleQuotes: (QuoteRef & { daysWaiting: number })[];
+  passportAlerts: { id: string; name: string; passportExpiry: string; tripLabel: string; tripDate: string | null }[];
   finance: {
+    profitThisMonth: number;
+    marginThisMonth: number;
     invoicedThisMonth: number;
     invoicedLastMonth: number;
     receivableTotal: number;
@@ -187,6 +197,16 @@ function buildTasks(d: DashboardData): Task[] {
       tab: 'bookings',
     });
   }
+  for (const c of d.passportAlerts ?? []) {
+    tasks.push({
+      key: `passport-${c.id}`,
+      tone: 'warn',
+      title: `Pasaporte de ${c.name} vence el ${new Date(c.passportExpiry).toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+      detail: c.tripDate ? `Tiene viaje el ${shortDate(c.tripDate)}: ${c.tripLabel}` : c.tripLabel,
+      action: 'Ver cliente',
+      tab: 'clients',
+    });
+  }
   for (const q of d.staleQuotes) {
     tasks.push({
       key: `stale-${q.id}`,
@@ -283,6 +303,13 @@ function Dashboard({ me }: { me: AdminIdentity | null }) {
           value={<>{data.pendingQuoteCount} <small className="text-[13px] font-medium" style={{ color: 'var(--a-muted)', fontFamily: 'var(--a-font-body)' }}>{formatPrice(data.openQuoteTotal)}</small></>}
           extra={data.staleQuotes.length > 0 ? `${data.staleQuotes.length} sin respuesta hace 5+ días` : 'Todas al día'}
         />
+{fin ? (
+          <Kpi
+            label="Ganancia del mes"
+            value={<>{formatPrice(fin.profitThisMonth)} <small className="text-[13px] font-medium" style={{ color: 'var(--a-muted)', fontFamily: 'var(--a-font-body)' }}>{fin.marginThisMonth}% margen</small></>}
+            extra="Precio al cliente menos costo del proveedor"
+          />
+        ) : (
         <Kpi
           label="Cotizaciones · 14 días"
           value={trendTotal}
@@ -293,6 +320,7 @@ function Dashboard({ me }: { me: AdminIdentity | null }) {
             </div>
           )}
         />
+        )}
       </section>
 
       <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -364,9 +392,14 @@ function Dashboard({ me }: { me: AdminIdentity | null }) {
                 Los e-CF son obligatorios desde el <b style={{ color: 'var(--a-fg)' }}>15 de noviembre de 2026</b>
                 {ecfDaysLeft > 0 && <>. Faltan <b style={{ color: 'var(--a-fg)' }}>{ecfDaysLeft} días</b></>}.
               </p>
-              <p className="text-sm" style={{ color: 'var(--a-muted)' }}>
-                Las facturas que se emiten aquí todavía son de control interno. Para que sean válidas ante la DGII hay que
-                conectar un proveedor de e-CF certificado.
+              {['Certificado digital para firmar (proveedor autorizado por INDOTEL)', 'Habilitación como emisor en la Oficina Virtual de la DGII', 'Conectar el proveedor de e-CF certificado', 'Pruebas de certificación'].map((step) => (
+                <div key={step} className="flex items-center gap-2 text-sm">
+                  <Pill tone="mute">Pendiente</Pill>
+                  <span>{step}</span>
+                </div>
+              ))}
+              <p className="text-xs" style={{ color: 'var(--a-faint)' }}>
+                Mientras tanto, las facturas que se emiten aquí son de control interno.
               </p>
             </div>
           </section>
@@ -414,12 +447,10 @@ function RecentBookings({ bookings }: { bookings: DashboardBooking[] }) {
 function Settings({ me }: { me: AdminIdentity | null }) {
   return (
     <div className="flex flex-col gap-[18px]">
-      <div>
-        <h1 className="admin-display text-[23px] font-bold sm:text-[28px]">Configuración</h1>
-        <p style={{ color: 'var(--a-muted)' }}>Apariencia del panel y datos de la empresa.</p>
-      </div>
+      <PageHeader title="Configuración" subtitle="Empresa, apariencia y seguridad." />
       <AppearancePanel />
       {hasFullAccess(me?.role) && <CompanySettingsPanel />}
+      {hasFullAccess(me?.role) && <UsersPanel />}
     </div>
   );
 }
@@ -446,6 +477,11 @@ export default function AdminPage() {
       {tab === 'invoices' && <InvoicesPanel />}
       {tab === 'receivables' && <ReceivablesPanel />}
       {tab === 'settings' && <Settings me={me} />}
+      {tab === 'sales' && <SalesBoardPanel />}
+      {tab === 'calendar' && <CalendarPanel />}
+      {tab === 'vouchers' && <VouchersPanel />}
+      {tab === 'reports' && <ReportsPanel />}
+      {tab === 'dgii' && <DgiiPanel />}
     </main>
   );
 }

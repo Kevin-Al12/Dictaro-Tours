@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { Trash2, Eye, CalendarClock, Plane, Hotel, Compass, FileText } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Trash2, Eye, CalendarClock, Plane, Hotel, Compass, FileText, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDate, formatShortDate } from '@/lib/utils';
 import { useAdminList } from '@/hooks/useAdminList';
 import { deleteAdminItem } from '@/lib/adminActions';
 import { useAdminTab } from './AdminTabContext';
 import AdminModal from './AdminModal';
 import AdminTableShell from './AdminTableShell';
+import { PageHeader, Who, StatusSelect, IconButton, FilterChips, DetailRow, Pill, type Tone } from './ui';
 
 interface Booking {
   id: string;
@@ -34,12 +35,14 @@ const STATUS_LABEL: Record<string, string> = {
   completada: 'Completada',
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  pendiente: 'bg-yellow-100 text-yellow-700',
-  confirmada: 'bg-green-100 text-green-700',
-  cancelada: 'bg-red-100 text-red-700',
-  completada: 'bg-blue-100 text-blue-700',
+const STATUS_TONE: Record<string, Tone> = {
+  pendiente: 'warn',
+  confirmada: 'ok',
+  cancelada: 'bad',
+  completada: 'info',
 };
+
+type Filter = 'todas' | keyof typeof STATUS_LABEL;
 
 const ITEM_ICON: Record<string, typeof Plane> = {
   destino: Plane,
@@ -52,6 +55,22 @@ export default function BookingsPanel() {
   const { setTab } = useAdminTab();
   const [viewing, setViewing] = useState<Booking | null>(null);
   const [converting, setConverting] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('todas');
+  const [query, setQuery] = useState('');
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const b of bookings) c[b.status] = (c[b.status] ?? 0) + 1;
+    return c;
+  }, [bookings]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return bookings.filter((b) =>
+      (filter === 'todas' || b.status === filter) &&
+      (!q || `${b.customerName} ${b.customerEmail} ${b.customerPhone} ${b.itemLabel}`.toLowerCase().includes(q)),
+    );
+  }, [bookings, filter, query]);
 
   async function changeStatus(booking: Booking, status: string) {
     const res = await fetch(`/api/admin/bookings/${booking.id}`, {
@@ -88,79 +107,76 @@ export default function BookingsPanel() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="admin-display text-2xl font-bold text-gray-900">Reservas</h2>
-      </div>
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Reservas"
+        subtitle={loading ? 'Cargando…' : `${bookings.length} recibidas desde la web · ${counts.pendiente ?? 0} por confirmar`}
+      />
 
       <AdminTableShell
         loading={loading}
-        isEmpty={bookings.length === 0}
+        isEmpty={visible.length === 0}
         emptyIcon={CalendarClock}
-        emptyMessage="Aún no hay reservas ni cotizaciones desde la web."
+        emptyMessage={bookings.length === 0 ? 'Aún no hay reservas ni cotizaciones desde la web.' : 'Ninguna reserva coincide con el filtro.'}
+        toolbar={
+          <>
+            <FilterChips<Filter>
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'todas', label: 'Todas', count: bookings.length },
+                ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value: value as Filter, label, count: counts[value] ?? 0 })),
+              ]}
+            />
+            <label className="relative ml-auto w-full sm:w-60">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--a-faint)' }} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar cliente o viaje…" aria-label="Buscar reservas" className="admin-input pl-8" />
+            </label>
+          </>
+        }
       >
-        <table className="w-full">
+        <table className="admin-table">
           <thead>
-            <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-              <th className="px-4 py-2 text-left">Cliente</th>
-              <th className="px-4 py-2 text-left">Ítem</th>
-              <th className="px-4 py-2 text-left">Tipo</th>
-              <th className="px-4 py-2 text-left">Fecha</th>
-              <th className="px-4 py-2 text-left">Total</th>
-              <th className="px-4 py-2 text-left">Estado</th>
-              <th className="px-4 py-2 text-left">Acciones</th>
+            <tr>
+              <th>Cliente</th>
+              <th>Viaje</th>
+              <th>Fecha</th>
+              <th className="r">Pax</th>
+              <th className="r">Total</th>
+              <th>Estado</th>
+              <th className="r"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {bookings.map((b) => {
+          <tbody>
+            {visible.map((b) => {
               const ItemIcon = ITEM_ICON[b.itemType] || Plane;
               return (
-                <tr key={b.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-2.5 text-sm font-medium text-gray-900">{b.customerName}</td>
-                  <td className="px-4 py-2.5 text-sm text-gray-600">
+                <tr key={b.id}>
+                  <td><Who name={b.customerName} detail={b.customerPhone || b.customerEmail} /></td>
+                  <td>
                     <span className="flex items-center gap-1.5">
-                      <ItemIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                      {b.itemLabel}
+                      <ItemIcon className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--a-faint)' }} />
+                      <span className="truncate">{b.itemLabel}</span>
                     </span>
+                    <span className="text-xs muted">{b.type === 'quote' ? 'Pidió cotización' : 'Reserva'}</span>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-gray-500">
-                    {b.type === 'quote' ? 'Cotización' : 'Reserva'}
+                  <td className="nowrap admin-num">{b.date ? formatShortDate(b.date) : <span className="muted">Sin fecha</span>}</td>
+                  <td className="r admin-num">{b.passengers}</td>
+                  <td className="r admin-num nowrap"><b>{formatPrice(b.total)}</b></td>
+                  <td>
+                    <StatusSelect label={`Estado de la reserva de ${b.customerName}`} value={b.status} options={STATUS_LABEL} tones={STATUS_TONE} onChange={(s) => changeStatus(b, s)} />
                   </td>
-                  <td className="px-4 py-2.5 text-sm text-gray-500">{b.date ? formatDate(b.date) : '—'}</td>
-                  <td className="px-4 py-2.5 text-sm font-semibold text-gray-900">{formatPrice(b.total)}</td>
-                  <td className="px-4 py-2.5">
-                    <select
-                      value={b.status}
-                      onChange={(e) => changeStatus(b, e.target.value)}
-                      className={`text-xs font-semibold px-2.5 py-1 rounded-full border-none focus:outline-none focus:ring-2 focus:ring-gold-500/40 ${STATUS_COLOR[b.status]}`}
-                    >
-                      {Object.keys(STATUS_LABEL).map((s) => (
-                        <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-1">
+                  <td className="r">
+                    <div className="flex items-center justify-end gap-1">
                       {b.type === 'booking' && !b.quote && (
-                        <button
-                          onClick={() => handleConvertToQuote(b)}
-                          disabled={converting === b.id}
-                          title="Convertir en cotización"
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-gold-600 hover:bg-gold-50 transition-all disabled:opacity-50"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          {converting === b.id ? '...' : 'Cotizar'}
+                        <button type="button" className="admin-btn" data-size="sm" onClick={() => handleConvertToQuote(b)} disabled={converting === b.id}>
+                          <FileText className="h-3.5 w-3.5" />
+                          {converting === b.id ? 'Creando…' : 'Cotizar'}
                         </button>
                       )}
-                      {b.quote && (
-                        <span className="text-xs text-gray-400 font-mono px-1">COT-{String(b.quote.number).padStart(4, '0')}</span>
-                      )}
-                      <button onClick={() => setViewing(b)} className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all">
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete(b)} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {b.quote && <Pill tone="mute">COT-{String(b.quote.number).padStart(4, '0')}</Pill>}
+                      <IconButton icon={Eye} label="Ver detalle" onClick={() => setViewing(b)} />
+                      <IconButton icon={Trash2} label="Eliminar" danger onClick={() => handleDelete(b)} />
                     </div>
                   </td>
                 </tr>
@@ -170,39 +186,24 @@ export default function BookingsPanel() {
         </table>
       </AdminTableShell>
 
-      <AdminModal open={Boolean(viewing)} onClose={() => setViewing(null)} title={viewing?.itemLabel ?? ''}>
+      <AdminModal
+        open={Boolean(viewing)}
+        onClose={() => setViewing(null)}
+        title={viewing?.itemLabel ?? ''}
+        subtitle={viewing ? `${viewing.type === 'quote' ? 'Pidió cotización' : 'Reserva'} · recibida el ${formatDate(viewing.createdAt)}` : undefined}
+      >
         {viewing && (
           <>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Cliente</span>
-                <span className="font-medium text-gray-900">{viewing.customerName}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Correo</span>
-                <span className="font-medium text-gray-900">{viewing.customerEmail}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Teléfono</span>
-                <span className="font-medium text-gray-900">{viewing.customerPhone}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-100">
-                <span className="text-gray-500">Pasajeros</span>
-                <span className="font-medium text-gray-900">{viewing.passengers}</span>
-              </div>
-              {viewing.date && (
-                <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-500">Fecha</span>
-                  <span className="font-medium text-gray-900">{formatDate(viewing.date)}</span>
-                </div>
-              )}
-              {viewing.notes && (
-                <p className="text-xs text-gray-500 italic pt-2">"{viewing.notes}"</p>
-              )}
-            </div>
-            <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-200">
-              <span className="text-sm font-medium text-gray-700">Total</span>
-              <span className="text-lg font-bold text-gray-900">{formatPrice(viewing.total)}</span>
+            <DetailRow label="Cliente">{viewing.customerName}</DetailRow>
+            <DetailRow label="Correo">{viewing.customerEmail}</DetailRow>
+            <DetailRow label="Teléfono">{viewing.customerPhone}</DetailRow>
+            <DetailRow label="Pasajeros">{viewing.passengers}</DetailRow>
+            {viewing.date && <DetailRow label="Fecha de viaje">{formatDate(viewing.date)}</DetailRow>}
+            <DetailRow label="Estado"><Pill tone={STATUS_TONE[viewing.status] ?? 'mute'}>{STATUS_LABEL[viewing.status] ?? viewing.status}</Pill></DetailRow>
+            {viewing.notes && <p className="pt-3 text-sm italic" style={{ color: 'var(--a-muted)' }}>&ldquo;{viewing.notes}&rdquo;</p>}
+            <div className="mt-3 flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--a-line)' }}>
+              <span className="text-sm font-semibold" style={{ color: 'var(--a-muted)' }}>Total</span>
+              <span className="admin-display admin-num text-xl font-bold">{formatPrice(viewing.total)}</span>
             </div>
           </>
         )}

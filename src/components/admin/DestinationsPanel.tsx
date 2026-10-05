@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Edit3, Trash2, Plane } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Edit3, Trash2, Plane, Search, ImageOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatPrice } from '@/lib/utils';
 import { useAdminList } from '@/hooks/useAdminList';
 import { deleteAdminItem } from '@/lib/adminActions';
 import AdminModal from './AdminModal';
 import AdminTableShell from './AdminTableShell';
+import { PageHeader, Pill, IconButton, Field, FilterChips } from './ui';
 import type { Destination } from '@/types';
 
 const CONTINENTS = ['Europa', 'Asia', 'América', 'África', 'Oceanía'];
@@ -21,8 +22,34 @@ const emptyForm = {
   gallery: '', departureDates: '', includes: '', excludes: '', highlights: '',
 };
 
+type TextKey = Exclude<keyof typeof emptyForm, 'featured'>;
+
 const linesToArray = (text: string) => text.split('\n').map((l) => l.trim()).filter(Boolean);
 const arrayToLines = (arr: string[]) => (arr || []).join('\n');
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--a-faint)' }}>
+      {children}
+    </h3>
+  );
+}
+
+function Thumb({ src, alt }: { src: string; alt: string }) {
+  return (
+    <span
+      className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg"
+      style={{ background: 'var(--a-surface-2)', border: '1px solid var(--a-line)', color: 'var(--a-faint)' }}
+    >
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt={alt} className="h-full w-full object-cover" loading="lazy" />
+      ) : (
+        <ImageOff className="h-4 w-4" />
+      )}
+    </span>
+  );
+}
 
 export default function DestinationsPanel() {
   const { data: destinations, loading, reload } = useAdminList<Destination>('/api/admin/destinations', 'destinations');
@@ -30,6 +57,27 @@ export default function DestinationsPanel() {
   const [editing, setEditing] = useState<Destination | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [continent, setContinent] = useState<string>('all');
+  const [query, setQuery] = useState('');
+
+  const chips = useMemo(() => {
+    const present = Array.from(new Set([...CONTINENTS, ...destinations.map((d) => d.continent)])).filter(
+      (c) => destinations.some((d) => d.continent === c),
+    );
+    return [
+      { value: 'all', label: 'Todos', count: destinations.length },
+      ...present.map((c) => ({ value: c, label: c, count: destinations.filter((d) => d.continent === c).length })),
+    ];
+  }, [destinations]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return destinations.filter((d) => {
+      if (continent !== 'all' && d.continent !== continent) return false;
+      if (!q) return true;
+      return `${d.name} ${d.country} ${d.tag ?? ''}`.toLowerCase().includes(q);
+    });
+  }, [destinations, continent, query]);
 
   function openNew() {
     setEditing(null);
@@ -51,6 +99,13 @@ export default function DestinationsPanel() {
     });
     setModalOpen(true);
   }
+
+  // Enlaza un campo de texto del formulario.
+  const bind = (key: TextKey) => ({
+    value: form[key],
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setForm({ ...form, [key]: e.target.value }),
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,51 +142,78 @@ export default function DestinationsPanel() {
     reload();
   }
 
+  const newButton = (
+    <button type="button" onClick={openNew} className="admin-btn" data-variant="primary">
+      <Plus className="h-4 w-4" />Nuevo destino
+    </button>
+  );
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="admin-display text-2xl font-bold text-gray-900">Destinos y paquetes</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Esto alimenta directamente lo que ve el cliente en la web pública.</p>
-        </div>
-        <button onClick={openNew} className="btn-primary text-sm py-2 px-4">
-          <Plus className="w-4 h-4" />Nuevo destino
-        </button>
-      </div>
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Destinos y paquetes"
+        subtitle={
+          loading
+            ? 'Cargando…'
+            : `${destinations.length} ${destinations.length === 1 ? 'destino publicado' : 'destinos publicados'} · se muestran en la web pública`
+        }
+        actions={newButton}
+      />
 
       <AdminTableShell
         loading={loading}
-        isEmpty={destinations.length === 0}
+        isEmpty={visible.length === 0}
         emptyIcon={Plane}
-        emptyMessage="Aún no hay destinos. Agrega el primero."
+        emptyMessage={destinations.length === 0 ? 'Aún no hay destinos. Agrega el primero.' : 'Ningún destino coincide con el filtro.'}
+        emptyAction={destinations.length === 0 ? newButton : undefined}
+        toolbar={
+          <>
+            <FilterChips value={continent} onChange={setContinent} options={chips} />
+            <label className="relative w-full sm:ml-auto sm:w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--a-faint)' }} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar destino o país…" aria-label="Buscar destinos" className="admin-input pl-8" />
+            </label>
+          </>
+        }
       >
-        <table className="w-full">
+        <table className="admin-table">
           <thead>
-            <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-              <th className="px-4 py-2 text-left">Destino</th>
-              <th className="px-4 py-2 text-left">País</th>
-              <th className="px-4 py-2 text-left">Precio</th>
-              <th className="px-4 py-2 text-left">Cupos</th>
-              <th className="px-4 py-2 text-left">Rating</th>
-              <th className="px-4 py-2 text-left">Acciones</th>
+            <tr>
+              <th>Destino</th>
+              <th>Duración</th>
+              <th className="r">Precio</th>
+              <th className="r">Cupos</th>
+              <th>Destacado</th>
+              <th className="r"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {destinations.map((d) => (
-              <tr key={d.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 font-medium text-gray-900 text-sm">{d.name}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-500">{d.country}</td>
-                <td className="px-4 py-2.5 text-sm font-semibold text-gray-900">{formatPrice(d.price)}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-600">{d.available}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-600">⭐ {d.rating}</td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(d)} className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all">
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(d)} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+          <tbody>
+            {visible.map((d) => (
+              <tr key={d.id}>
+                <td>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Thumb src={d.image} alt={d.name} />
+                    <div className="min-w-0">
+                      <b className="block truncate font-semibold">{d.name}</b>
+                      <span className="block truncate text-xs" style={{ color: 'var(--a-muted)' }}>
+                        {d.country}{d.tag ? ` · ${d.tag}` : ''}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+                <td className="nowrap">{d.duration || <span className="muted">—</span>}</td>
+                <td className="r nowrap admin-num">
+                  {d.originalPrice ? (
+                    <span className="mr-1.5 text-xs line-through" style={{ color: 'var(--a-faint)' }}>{formatPrice(d.originalPrice)}</span>
+                  ) : null}
+                  <b className="font-semibold">{formatPrice(d.price)}</b>
+                </td>
+                <td className="r admin-num">{d.available}</td>
+                <td>{d.featured ? <Pill tone="info">Destacado</Pill> : <span className="muted">—</span>}</td>
+                <td className="r">
+                  <div className="flex items-center justify-end gap-1">
+                    <IconButton icon={Edit3} label="Editar" onClick={() => openEdit(d)} />
+                    <IconButton icon={Trash2} label="Eliminar" danger onClick={() => handleDelete(d)} />
                   </div>
                 </td>
               </tr>
@@ -140,155 +222,124 @@ export default function DestinationsPanel() {
         </table>
       </AdminTableShell>
 
-      <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar destino' : 'Nuevo destino'} maxWidth="max-w-2xl">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre</label>
-              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="París"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
+      <AdminModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editing ? 'Editar destino' : 'Nuevo destino'}
+        subtitle={editing ? editing.name : 'Se publicará en la web pública al guardar.'}
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <section className="flex flex-col gap-3.5">
+            <SectionTitle>Información básica</SectionTitle>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label="Nombre">
+                <input required {...bind('name')} placeholder="París" className="admin-input" />
+              </Field>
+              <Field label="Slug (URL)">
+                <input required {...bind('slug')} placeholder="paris-francia" className="admin-input" />
+              </Field>
+              <Field label="País">
+                <input required {...bind('country')} placeholder="Francia" className="admin-input" />
+              </Field>
+              <Field label="Continente">
+                <select {...bind('continent')} className="admin-input">
+                  {CONTINENTS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Slug (URL)</label>
-              <input required value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                placeholder="paris-francia"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
+            <Field label="Descripción corta">
+              <input {...bind('shortDescription')} placeholder="La ciudad del amor, arte y gastronomía inigualable." className="admin-input" />
+            </Field>
+            <Field label="Descripción completa">
+              <textarea rows={3} {...bind('description')} className="admin-input" />
+            </Field>
+            <Field label="Imagen principal (URL)">
+              <input {...bind('image')} placeholder="https://..." className="admin-input" />
+            </Field>
+          </section>
+
+          <section className="flex flex-col gap-3.5">
+            <SectionTitle>Precio y disponibilidad</SectionTitle>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label="Precio (DOP)">
+                <input required type="number" step="0.01" min="0" {...bind('price')} className="admin-input admin-num" />
+              </Field>
+              <Field label="Precio original">
+                <input type="number" step="0.01" min="0" {...bind('originalPrice')} placeholder="Opcional" className="admin-input admin-num" />
+              </Field>
+              <Field label="Duración">
+                <input {...bind('duration')} placeholder="10 días / 9 noches" className="admin-input" />
+              </Field>
+              <Field label="Cupos">
+                <input type="number" min="0" {...bind('available')} className="admin-input admin-num" />
+              </Field>
+              <Field label="Etiqueta">
+                <input {...bind('tag')} placeholder="Más vendido" className="admin-input" />
+              </Field>
+              <div className="flex items-end">
+                <label
+                  className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm"
+                  style={{ border: '1px solid var(--a-line)', background: 'var(--a-surface-2)' }}
+                >
+                  <input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
+                  Destacado en la página de inicio
+                </label>
+              </div>
             </div>
+          </section>
+
+          <section className="flex flex-col gap-3.5">
+            <SectionTitle>Reseñas y ubicación</SectionTitle>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label="Rating (0–5)">
+                <input type="number" step="0.1" min="0" max="5" {...bind('rating')} className="admin-input admin-num" />
+              </Field>
+              <Field label="Reseñas">
+                <input type="number" min="0" {...bind('reviews')} className="admin-input admin-num" />
+              </Field>
+              <Field label="Latitud">
+                <input type="number" step="0.0001" {...bind('lat')} className="admin-input admin-num" />
+              </Field>
+              <Field label="Longitud">
+                <input type="number" step="0.0001" {...bind('lng')} className="admin-input admin-num" />
+              </Field>
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-3.5">
+            <SectionTitle>Galería y salidas</SectionTitle>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label="Galería (una URL por línea)">
+                <textarea rows={4} {...bind('gallery')} className="admin-input font-mono text-xs" />
+              </Field>
+              <Field label="Fechas de salida (AAAA-MM-DD, una por línea)">
+                <textarea rows={4} {...bind('departureDates')} className="admin-input font-mono text-xs" />
+              </Field>
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-3.5">
+            <SectionTitle>Qué incluye el paquete</SectionTitle>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label="Incluye (una por línea)">
+                <textarea rows={4} {...bind('includes')} className="admin-input" />
+              </Field>
+              <Field label="No incluye (una por línea)">
+                <textarea rows={4} {...bind('excludes')} className="admin-input" />
+              </Field>
+            </div>
+            <Field label="Destacados del viaje (una por línea)">
+              <textarea rows={3} {...bind('highlights')} className="admin-input" />
+            </Field>
+          </section>
+
+          <div className="flex justify-end gap-2 pt-4" style={{ borderTop: '1px solid var(--a-line)' }}>
+            <button type="button" className="admin-btn" onClick={() => setModalOpen(false)}>Cancelar</button>
+            <button type="submit" disabled={saving} className="admin-btn" data-variant="primary">
+              {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear destino'}
+            </button>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">País</label>
-              <input required value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })}
-                placeholder="Francia"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Continente</label>
-              <select value={form.continent} onChange={(e) => setForm({ ...form, continent: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 appearance-none">
-                {CONTINENTS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descripción corta</label>
-            <input value={form.shortDescription} onChange={(e) => setForm({ ...form, shortDescription: e.target.value })}
-              placeholder="La ciudad del amor, arte y gastronomía inigualable."
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Descripción completa</label>
-            <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 resize-none" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Imagen principal (URL)</label>
-            <input value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })}
-              placeholder="https://..."
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Precio (DOP)</label>
-              <input required type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Precio original</label>
-              <input type="number" step="0.01" min="0" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })}
-                placeholder="opcional"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Duración</label>
-              <input value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })}
-                placeholder="10 días / 9 noches"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Rating</label>
-              <input type="number" step="0.1" min="0" max="5" value={form.rating} onChange={(e) => setForm({ ...form, rating: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Reseñas</label>
-              <input type="number" min="0" value={form.reviews} onChange={(e) => setForm({ ...form, reviews: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Cupos</label>
-              <input type="number" min="0" value={form.available} onChange={(e) => setForm({ ...form, available: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Etiqueta</label>
-              <input value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })}
-                placeholder="Más vendido"
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Latitud</label>
-              <input type="number" step="0.0001" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Longitud</label>
-              <input type="number" step="0.0001" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
-            Destacado en la página de inicio
-          </label>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Galería (una URL por línea)</label>
-              <textarea rows={3} value={form.gallery} onChange={(e) => setForm({ ...form, gallery: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 focus:outline-none focus:border-gold-500 resize-none font-mono" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Fechas de salida (una por línea, AAAA-MM-DD)</label>
-              <textarea rows={3} value={form.departureDates} onChange={(e) => setForm({ ...form, departureDates: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 focus:outline-none focus:border-gold-500 resize-none font-mono" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Incluye (una por línea)</label>
-              <textarea rows={4} value={form.includes} onChange={(e) => setForm({ ...form, includes: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 focus:outline-none focus:border-gold-500 resize-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">No incluye (una por línea)</label>
-              <textarea rows={4} value={form.excludes} onChange={(e) => setForm({ ...form, excludes: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 focus:outline-none focus:border-gold-500 resize-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Destacados (una por línea)</label>
-              <textarea rows={4} value={form.highlights} onChange={(e) => setForm({ ...form, highlights: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 focus:outline-none focus:border-gold-500 resize-none" />
-            </div>
-          </div>
-
-          <button type="submit" disabled={saving} className="btn-primary w-full justify-center py-3 disabled:opacity-60">
-            {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear destino'}
-          </button>
         </form>
       </AdminModal>
     </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/adminRoles';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(req, ['owner', 'admin']);
@@ -23,7 +24,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const updated = await prisma.invoice.update({
     where: { id: params.id },
     data: { status: 'anulada', voidReason: String(voidReason).trim(), voidedAt: new Date() },
+    include: { client: { select: { name: true } } },
   });
+  await logAudit(req, 'factura.anulada', `anuló la factura ${invoice.number ? `FAC-${String(invoice.number).padStart(4, '0')}` : 'en borrador'} de ${updated.client.name} (${String(voidReason).trim()})`);
 
   return NextResponse.json({ invoice: updated });
 }

@@ -17,6 +17,7 @@ model Product {
   code        String   @unique
   description String
   price       Float
+  cost        Float    @default(0) // lo que cobra el proveedor; sirve para calcular la ganancia
   category    String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -44,6 +45,8 @@ model Client {
   phone        String?
   email        String?  @unique
   document     String?
+  passportNumber String?
+  passportExpiry DateTime? // para avisar antes de que venza si el cliente tiene viaje
   notes        String?
   passwordHash String?  // solo se define cuando el cliente se registra; null = registro "invitado" creado desde una reserva o por un admin
   createdAt    DateTime @default(now())
@@ -104,6 +107,7 @@ model InvoiceItem {
   id          String   @id @default(cuid())
   description String
   unitPrice   Float
+  unitCost    Float    @default(0)
   quantity    Int      @default(1)
   itbisRate   Float    @default(0)
   subtotal    Float
@@ -216,6 +220,9 @@ model Booking {
   passengers    Int      @default(1)
   total         Float    @default(0)
   status        String   @default("pendiente") // "pendiente" | "confirmada" | "cancelada" | "completada"
+  supplier      String?  // hotel, aerolínea u operador que presta el servicio
+  locator       String?  // localizador o número de confirmación del proveedor
+  voucherSentAt DateTime?
   notes         String?
   customerName  String
   customerEmail String
@@ -232,6 +239,7 @@ model QuoteItem {
   id          String  @id @default(cuid())
   description String
   unitPrice   Float
+  unitCost    Float   @default(0)
   quantity    Int     @default(1)
   subtotal    Float
 
@@ -239,4 +247,13 @@ model QuoteItem {
   quoteId     String
   product     Product? @relation(fields: [productId], references: [id])
   productId   String?
+}
+
+// Bitácora de cambios: solo se agregan registros, nunca se editan ni se borran.
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  actorName String
+  action    String   // ej. "pago.registrado", "factura.emitida"
+  detail    String
 }

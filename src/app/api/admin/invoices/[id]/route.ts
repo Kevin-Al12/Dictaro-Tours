@@ -9,7 +9,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const invoice = await prisma.invoice.findUnique({
     where: { id: params.id },
-    include: { client: true, items: true, payments: { orderBy: { receivedAt: 'desc' } }, quote: true },
+    include: { client: true, items: true, payments: { orderBy: { receivedAt: 'desc' } },
+      quote: { include: { booking: true } },
+      createdBy: { select: { name: true } },
+    },
   });
   if (!invoice) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
 

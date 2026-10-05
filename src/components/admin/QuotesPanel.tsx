@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Trash2, FileText, Eye, PlusCircle, Receipt } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Trash2, FileText, Eye, PlusCircle, Receipt, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDate, formatShortDate } from '@/lib/utils';
 import { useAdminList } from '@/hooks/useAdminList';
 import { deleteAdminItem } from '@/lib/adminActions';
 import { useAdminTab } from './AdminTabContext';
 import AdminModal from './AdminModal';
 import AdminTableShell from './AdminTableShell';
+import { PageHeader, Who, StatusSelect, IconButton, FilterChips, Field, Pill, type Tone } from './ui';
 
 interface Client {
   id: string;
@@ -20,12 +21,14 @@ interface Product {
   code: string;
   description: string;
   price: number;
+  cost?: number;
 }
 
 interface QuoteItem {
   id: string;
   description: string;
   unitPrice: number;
+  unitCost?: number;
   quantity: number;
   subtotal: number;
 }
@@ -45,6 +48,7 @@ interface DraftItem {
   productId: string;
   description: string;
   unitPrice: string;
+  unitCost: number; // costo del proveedor, viene del producto elegido
   quantity: string;
 }
 
@@ -55,14 +59,31 @@ const STATUS_LABEL: Record<string, string> = {
   vencida: 'Vencida',
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  borrador: 'bg-gray-100 text-gray-600',
-  enviada: 'bg-blue-100 text-blue-600',
-  aceptada: 'bg-green-100 text-green-600',
-  vencida: 'bg-red-100 text-red-600',
+const STATUS_TONE: Record<string, Tone> = {
+  borrador: 'mute',
+  enviada: 'info',
+  aceptada: 'ok',
+  rechazada: 'bad',
+  vencida: 'warn',
 };
 
-const emptyItem = (): DraftItem => ({ productId: '', description: '', unitPrice: '', quantity: '1' });
+type Filter = 'todas' | keyof typeof STATUS_LABEL;
+
+const quoteCode = (n: number) => `COT-${String(n).padStart(4, '0')}`;
+
+const emptyItem = (): DraftItem => ({ productId: '', description: '', unitPrice: '', unitCost: 0, quantity: '1' });
+
+// "Costo proveedores RD$X · Ganancia RD$Y · Margen Z%" debajo del total.
+function ProfitSummary({ total, cost }: { total: number; cost: number }) {
+  if (cost <= 0 || total <= 0) return null;
+  const profit = total - cost;
+  const margin = Math.round((profit / total) * 100);
+  return (
+    <p className="admin-num text-right text-xs font-semibold" style={{ color: profit >= 0 ? 'var(--a-ok)' : 'var(--a-bad)' }}>
+      Costo proveedores {formatPrice(cost)} · Ganancia {formatPrice(profit)} · Margen {margin}%
+    </p>
+  );
+}
 
 export default function QuotesPanel() {
   const { data: quotes, loading, reload } = useAdminList<Quote>('/api/admin/quotes', 'quotes');
@@ -78,6 +99,27 @@ export default function QuotesPanel() {
   const [clientId, setClientId] = useState('');
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
+  const [filter, setFilter] = useState<Filter>('todas');
+  const [query, setQuery] = useState('');
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const q of quotes) c[q.status] = (c[q.status] ?? 0) + 1;
+    return c;
+  }, [quotes]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return quotes.filter((x) =>
+      (filter === 'todas' || x.status === filter) &&
+      (!q || `${x.client.name} ${quoteCode(x.number)} ${x.notes ?? ''}`.toLowerCase().includes(q)),
+    );
+  }, [quotes, filter, query]);
+
+  const acceptedTotal = useMemo(
+    () => quotes.filter((q) => q.status === 'aceptada').reduce((sum, q) => sum + q.total, 0),
+    [quotes],
+  );
 
   function openNew() {
     setClientId('');
@@ -96,6 +138,7 @@ export default function QuotesPanel() {
       productId,
       description: product?.description || '',
       unitPrice: product ? String(product.price) : items[index].unitPrice,
+      unitCost: product?.cost ?? 0,
     });
   }
 
@@ -108,6 +151,7 @@ export default function QuotesPanel() {
     const qty = parseInt(it.quantity, 10) || 0;
     return sum + price * qty;
   }, 0);
+  const draftCost = items.reduce((sum, it) => sum + (it.unitCost || 0) * (parseInt(it.quantity, 10) || 0), 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -132,6 +176,7 @@ export default function QuotesPanel() {
           productId: it.productId || undefined,
           description: it.description,
           unitPrice: it.unitPrice,
+          unitCost: it.unitCost || 0,
           quantity: it.quantity,
         })),
       }),
@@ -161,7 +206,7 @@ export default function QuotesPanel() {
   }
 
   async function handleDelete(quote: Quote) {
-    const ok = await deleteAdminItem(`/api/admin/quotes/${quote.id}`, `¿Eliminar la cotización COT-${String(quote.number).padStart(4, '0')}?`);
+    const ok = await deleteAdminItem(`/api/admin/quotes/${quote.id}`, `¿Eliminar la cotización ${quoteCode(quote.number)}?`);
     if (!ok) return;
     toast.success('Cotización eliminada');
     reload();
@@ -182,72 +227,85 @@ export default function QuotesPanel() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="admin-display text-2xl font-bold text-gray-900">Cotizaciones</h2>
-        <button onClick={openNew} className="btn-primary text-sm py-2 px-4">
-          <Plus className="w-4 h-4" />Nueva cotización
-        </button>
-      </div>
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Cotizaciones"
+        subtitle={loading ? 'Cargando…' : `${quotes.length} en total · ${counts.enviada ?? 0} enviadas · ${formatPrice(acceptedTotal)} aceptado`}
+        actions={
+          <button type="button" onClick={openNew} className="admin-btn" data-variant="primary">
+            <Plus className="h-4 w-4" />Nueva cotización
+          </button>
+        }
+      />
 
       <AdminTableShell
         loading={loading}
-        isEmpty={quotes.length === 0}
+        isEmpty={visible.length === 0}
         emptyIcon={FileText}
         emptyMessage={
-          clients.length === 0
-            ? 'Primero agrega un cliente en la pestaña Clientes, luego crea tu primera cotización.'
-            : 'Aún no hay cotizaciones. Crea la primera.'
+          quotes.length > 0
+            ? 'Ninguna cotización coincide con el filtro.'
+            : clients.length === 0
+              ? 'Primero agrega un cliente en la pestaña Clientes, luego crea tu primera cotización.'
+              : 'Aún no hay cotizaciones. Crea la primera.'
+        }
+        emptyAction={
+          quotes.length === 0 && clients.length > 0 ? (
+            <button type="button" onClick={openNew} className="admin-btn" data-variant="primary" data-size="sm">
+              <Plus className="h-3.5 w-3.5" />Nueva cotización
+            </button>
+          ) : undefined
+        }
+        toolbar={
+          <>
+            <FilterChips<Filter>
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'todas', label: 'Todas', count: quotes.length },
+                ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value: value as Filter, label, count: counts[value] ?? 0 })),
+              ]}
+            />
+            <label className="relative ml-auto w-full sm:w-60">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--a-faint)' }} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar cliente o número…" aria-label="Buscar cotizaciones" className="admin-input pl-8" />
+            </label>
+          </>
         }
       >
-        <table className="w-full">
+        <table className="admin-table">
           <thead>
-            <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-              <th className="px-4 py-2 text-left">N°</th>
-              <th className="px-4 py-2 text-left">Cliente</th>
-              <th className="px-4 py-2 text-left">Fecha</th>
-              <th className="px-4 py-2 text-left">Total</th>
-              <th className="px-4 py-2 text-left">Estado</th>
-              <th className="px-4 py-2 text-left">Acciones</th>
+            <tr>
+              <th>N°</th>
+              <th>Cliente</th>
+              <th>Fecha</th>
+              <th className="r">Ítems</th>
+              <th className="r">Total</th>
+              <th>Estado</th>
+              <th className="r"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {quotes.map((q) => (
-              <tr key={q.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 font-mono text-xs text-gray-400">COT-{String(q.number).padStart(4, '0')}</td>
-                <td className="px-4 py-2.5 text-sm font-medium text-gray-900">{q.client.name}</td>
-                <td className="px-4 py-2.5 text-sm text-gray-500">{formatDate(q.createdAt)}</td>
-                <td className="px-4 py-2.5 text-sm font-semibold text-gray-900">{formatPrice(q.total)}</td>
-                <td className="px-4 py-2.5">
-                  <select
-                    value={q.status}
-                    onChange={(e) => changeStatus(q, e.target.value)}
-                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border-none focus:outline-none focus:ring-2 focus:ring-gold-500/40 ${STATUS_COLOR[q.status]}`}
-                  >
-                    {Object.keys(STATUS_LABEL).map((s) => (
-                      <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-                    ))}
-                  </select>
+          <tbody>
+            {visible.map((q) => (
+              <tr key={q.id}>
+                <td className="nowrap admin-num muted">{quoteCode(q.number)}</td>
+                <td><Who name={q.client.name} detail={q.notes || undefined} /></td>
+                <td className="nowrap admin-num">{formatShortDate(q.createdAt)}</td>
+                <td className="r admin-num">{q.items.length}</td>
+                <td className="r admin-num nowrap"><b>{formatPrice(q.total)}</b></td>
+                <td>
+                  <StatusSelect label={`Estado de la cotización ${quoteCode(q.number)}`} value={q.status} options={STATUS_LABEL} tones={STATUS_TONE} onChange={(s) => changeStatus(q, s)} />
                 </td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-1">
+                <td className="r">
+                  <div className="flex items-center justify-end gap-1">
                     {q.status === 'aceptada' && (
-                      <button
-                        onClick={() => handleConvert(q)}
-                        disabled={converting === q.id}
-                        title="Convertir a factura"
-                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-gold-600 hover:bg-gold-50 transition-all disabled:opacity-50"
-                      >
-                        <Receipt className="w-3.5 h-3.5" />
-                        {converting === q.id ? '...' : 'Facturar'}
+                      <button type="button" className="admin-btn" data-size="sm" onClick={() => handleConvert(q)} disabled={converting === q.id}>
+                        <Receipt className="h-3.5 w-3.5" />
+                        {converting === q.id ? 'Creando…' : 'Facturar'}
                       </button>
                     )}
-                    <button onClick={() => setViewing(q)} className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all">
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(q)} className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <IconButton icon={Eye} label="Ver detalle" onClick={() => setViewing(q)} />
+                    <IconButton icon={Trash2} label="Eliminar" danger onClick={() => handleDelete(q)} />
                   </div>
                 </td>
               </tr>
@@ -257,71 +315,80 @@ export default function QuotesPanel() {
       </AdminTableShell>
 
       {/* New quote builder */}
-      <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title="Nueva cotización" maxWidth="max-w-2xl">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Cliente</label>
-            <select required value={clientId} onChange={(e) => setClientId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 appearance-none">
-              <option value="">Selecciona un cliente</option>
-              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+      <AdminModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Nueva cotización"
+        subtitle="Elige el cliente y agrega productos o servicios"
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Cliente">
+              <select required value={clientId} onChange={(e) => setClientId(e.target.value)} className="admin-input">
+                <option value="">Selecciona un cliente</option>
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">Productos y servicios</label>
-              <button type="button" onClick={() => setItems([...items, emptyItem()])}
-                className="flex items-center gap-1 text-xs font-semibold text-gray-600 hover:text-gray-900 transition-colors">
-                <PlusCircle className="w-3.5 h-3.5" />Agregar ítem
+            <div className="mb-2 flex items-center justify-between">
+              <span className="admin-label" style={{ marginBottom: 0 }}>Productos y servicios</span>
+              <button type="button" onClick={() => setItems([...items, emptyItem()])} className="admin-btn" data-size="sm">
+                <PlusCircle className="h-3.5 w-3.5" />Agregar ítem
               </button>
             </div>
 
-            <div className="space-y-2">
-              {items.map((item, i) => (
-                <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <div className="flex-1 space-y-2">
-                    <select value={item.productId} onChange={(e) => pickProduct(i, e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-xs text-gray-900 focus:outline-none focus:border-gold-500 appearance-none">
-                      <option value="">— Producto libre (escribir abajo) —</option>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.description} · {formatPrice(p.price)}</option>)}
-                    </select>
-                    <input required value={item.description} onChange={(e) => updateItem(i, { description: e.target.value })}
-                      placeholder="Descripción"
-                      className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-                    <div className="flex gap-2">
-                      <input required type="number" step="0.01" min="0" value={item.unitPrice} onChange={(e) => updateItem(i, { unitPrice: e.target.value })}
-                        placeholder="Precio"
-                        className="w-1/2 px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
-                      <input required type="number" min="1" value={item.quantity} onChange={(e) => updateItem(i, { quantity: e.target.value })}
-                        placeholder="Cant."
-                        className="w-1/2 px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500" />
+            <div className="flex flex-col gap-2">
+              {items.map((item, i) => {
+                const lineTotal = (parseFloat(item.unitPrice) || 0) * (parseInt(item.quantity, 10) || 0);
+                return (
+                  <div
+                    key={i}
+                    className="grid grid-cols-1 gap-2 rounded-lg p-3 sm:grid-cols-[1fr_110px_80px_auto]"
+                    style={{ background: 'var(--a-surface-2)', border: '1px solid var(--a-line)' }}
+                  >
+                    <div className="flex flex-col gap-2 sm:col-span-4">
+                      <select aria-label={`Producto del ítem ${i + 1}`} value={item.productId} onChange={(e) => pickProduct(i, e.target.value)} className="admin-input">
+                        <option value="">— Producto libre (escribir abajo) —</option>
+                        {products.map((p) => <option key={p.id} value={p.id}>{p.description} · {formatPrice(p.price)}</option>)}
+                      </select>
+                    </div>
+                    <input required aria-label={`Descripción del ítem ${i + 1}`} value={item.description} onChange={(e) => updateItem(i, { description: e.target.value })}
+                      placeholder="Descripción" className="admin-input" />
+                    <div className="grid grid-cols-2 gap-2 sm:contents">
+                      <input required aria-label={`Precio del ítem ${i + 1}`} type="number" step="0.01" min="0" value={item.unitPrice} onChange={(e) => updateItem(i, { unitPrice: e.target.value })}
+                        placeholder="Precio" className="admin-input admin-num text-right" />
+                      <input required aria-label={`Cantidad del ítem ${i + 1}`} type="number" min="1" value={item.quantity} onChange={(e) => updateItem(i, { quantity: e.target.value })}
+                        placeholder="Cant." className="admin-input admin-num text-right" />
+                    </div>
+                    <div className="flex items-center justify-between gap-2 sm:justify-end">
+                      <span className="admin-num text-sm font-semibold sm:min-w-[84px] sm:text-right">{formatPrice(lineTotal)}</span>
+                      <IconButton icon={Trash2} label={`Quitar ítem ${i + 1}`} danger disabled={items.length === 1} onClick={() => removeItem(i)} />
                     </div>
                   </div>
-                  <button type="button" onClick={() => removeItem(i)} disabled={items.length === 1}
-                    className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-30">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notas</label>
-            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
-              placeholder="Condiciones, vigencia, etc."
-              className="w-full px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 focus:outline-none focus:border-gold-500 resize-none" />
-          </div>
+          <Field label="Notas">
+            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Condiciones, vigencia, etc." className="admin-input resize-none" />
+          </Field>
 
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">Total</span>
-            <span className="text-lg font-bold text-gray-900">{formatPrice(draftTotal)}</span>
+          <div className="flex items-baseline justify-end gap-4 pt-3" style={{ borderTop: '1px solid var(--a-line)' }}>
+            <span className="text-sm font-semibold" style={{ color: 'var(--a-muted)' }}>Total</span>
+            <span className="admin-display admin-num text-xl font-bold">{formatPrice(draftTotal)}</span>
           </div>
+          <div className="-mt-2"><ProfitSummary total={draftTotal} cost={draftCost} /></div>
 
-          <button type="submit" disabled={saving} className="btn-primary w-full justify-center py-3 disabled:opacity-60">
-            {saving ? 'Guardando...' : 'Crear cotización'}
-          </button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button type="button" className="admin-btn" onClick={() => setModalOpen(false)}>Cancelar</button>
+            <button type="submit" disabled={saving} className="admin-btn" data-variant="primary">
+              {saving ? 'Guardando…' : 'Crear cotización'}
+            </button>
+          </div>
         </form>
       </AdminModal>
 
@@ -329,34 +396,56 @@ export default function QuotesPanel() {
       <AdminModal
         open={Boolean(viewing)}
         onClose={() => setViewing(null)}
-        title={viewing ? (
-          <div>
-            <div>COT-{String(viewing.number).padStart(4, '0')}</div>
-            <p className="text-sm font-normal text-gray-500 mt-0.5">
-              {viewing.client.name} · {formatDate(viewing.createdAt)}
-            </p>
-          </div>
-        ) : ''}
+        title={viewing ? quoteCode(viewing.number) : ''}
+        subtitle={viewing ? `${viewing.client.name} · ${formatDate(viewing.createdAt)}` : undefined}
+        maxWidth="max-w-lg"
       >
         {viewing && (
           <>
-            <div className="space-y-2 mb-4">
-              {viewing.items.map((it) => (
-                <div key={it.id} className="flex justify-between text-sm py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{it.description} × {it.quantity}</span>
-                  <span className="font-medium text-gray-900">{formatPrice(it.subtotal)}</span>
-                </div>
-              ))}
+            <div className="mb-3">
+              <Pill tone={STATUS_TONE[viewing.status] ?? 'mute'}>{STATUS_LABEL[viewing.status] ?? viewing.status}</Pill>
+            </div>
+            <div className="-mx-5 overflow-x-auto">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Descripción</th>
+                    <th className="r">Cant.</th>
+                    <th className="r">Precio</th>
+                    <th className="r">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewing.items.map((it) => (
+                    <tr key={it.id}>
+                      <td>{it.description}</td>
+                      <td className="r admin-num">{it.quantity}</td>
+                      <td className="r admin-num nowrap">{formatPrice(it.unitPrice)}</td>
+                      <td className="r admin-num nowrap"><b>{formatPrice(it.subtotal)}</b></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            {viewing.notes && (
-              <p className="text-xs text-gray-500 mb-4 italic">"{viewing.notes}"</p>
+            {viewing.notes && <p className="pt-3 text-sm italic" style={{ color: 'var(--a-muted)' }}>&ldquo;{viewing.notes}&rdquo;</p>}
+
+            <div className="mt-3 flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--a-line)' }}>
+              <span className="text-sm font-semibold" style={{ color: 'var(--a-muted)' }}>Total</span>
+              <span className="admin-display admin-num text-xl font-bold">{formatPrice(viewing.total)}</span>
+            </div>
+            <div className="mt-1">
+              <ProfitSummary total={viewing.total} cost={viewing.items.reduce((s, it) => s + (it.unitCost || 0) * it.quantity, 0)} />
+            </div>
+
+            {viewing.status === 'aceptada' && (
+              <div className="mt-4 flex justify-end">
+                <button type="button" className="admin-btn" data-variant="primary" onClick={() => handleConvert(viewing)} disabled={converting === viewing.id}>
+                  <Receipt className="h-4 w-4" />
+                  {converting === viewing.id ? 'Creando…' : 'Convertir a factura'}
+                </button>
+              </div>
             )}
-
-            <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-              <span className="text-sm font-medium text-gray-700">Total</span>
-              <span className="text-lg font-bold text-gray-900">{formatPrice(viewing.total)}</span>
-            </div>
           </>
         )}
       </AdminModal>
